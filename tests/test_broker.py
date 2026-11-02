@@ -61,15 +61,20 @@ def test_webhook_rejects_invalid_body(client):
     assert client.post("/webhooks/agent-requests", json=body).status_code == 422
 
 
-@pytest.mark.parametrize("respond, expected", [
-    (lambda r: httpx.Response(200), "done"),
-    (lambda r: httpx.Response(404), "skipped"),
-    (lambda r: httpx.Response(500), "retry"),
+@pytest.mark.parametrize("status, expected", [
+    (200, "done"),
+    (404, "dead_letter"),
+    (422, "dead_letter"),
+    (408, "retry"),
+    (429, "retry"),
+    (500, "retry"),
+    (503, "retry"),
 ])
-async def test_forward_maps_status_codes(respond, expected):
+async def test_forward_maps_status_codes(status, expected):
     settings = Settings(platform_url="http://platform.test")
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-        assert await forward(agent_result(), client, settings) == expected
+    transport = httpx.MockTransport(lambda r: httpx.Response(status, text="motivo"))
+    async with httpx.AsyncClient(transport=transport) as client:
+        assert (await forward(agent_result(), client, settings)).outcome == expected
 
 
 async def test_forward_retries_when_platform_unreachable():
@@ -77,7 +82,7 @@ async def test_forward_retries_when_platform_unreachable():
         raise httpx.ConnectError("plataforma fora")
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-        assert await forward(agent_result(), client, Settings()) == "retry"
+        assert (await forward(agent_result(), client, Settings())).outcome == "retry"
 
 
 async def test_forward_posts_to_callback_endpoint():
