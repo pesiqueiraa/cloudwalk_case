@@ -3,10 +3,11 @@ from datetime import datetime, timezone
 from uuid import NAMESPACE_URL, uuid5
 
 from helpdesk.contracts import AgentRequest, AgentResult
+from helpdesk.text_match import compile_terms
 
 ESCALATION_TERMS = {
-    "pt-BR": ("humano", "atendente", "pessoa de verdade"),
-    "en-US": ("human", "agent", "representative"),
+    "pt-BR": compile_terms(["humano", "atendente", "pessoa de verdade"]),
+    "en-US": compile_terms(["human", "agent", "representative"]),
 }
 
 REPLY = {
@@ -21,8 +22,7 @@ ESCALATION = {
 
 
 def decide(req: AgentRequest) -> AgentResult:
-    text = req.text.lower()
-    escalate = any(term in text for term in ESCALATION_TERMS[req.locale])
+    escalate = ESCALATION_TERMS[req.locale].search(req.text) is not None
     if escalate:
         template, reason = ESCALATION[req.locale]
     else:

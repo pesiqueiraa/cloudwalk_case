@@ -39,3 +39,9 @@ def test_preserves_trace_and_conversation():
     result = decide(req)
     assert (result.trace_id, result.conversation_id, result.in_reply_to) == (
         req.trace_id, req.conversation_id, req.message_id)
+
+
+def test_does_not_escalate_on_partial_word():
+    for text in ("I booked with a travel agency", "Your agents are great", "A chemical reagent spilled"):
+        result = decide(agent_request(brand="jim", locale="en-US", text=text))
+        assert result.event_type == "agent.replied", text

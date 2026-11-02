@@ -23,7 +23,7 @@ test = ["pytest==8.3.3", "pytest-asyncio==0.24.0"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-helpdesk = ["platform/schema.sql"]
+helpdesk = ["platform/*.sql", "triage/*.jsonl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

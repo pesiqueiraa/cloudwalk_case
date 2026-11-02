@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 Brand = Literal["infinitepay", "jim"]
 Locale = Literal["pt-BR", "en-US"]
 Channel = Literal["chat", "whatsapp", "email"]
+Category = Literal["payments", "hardware", "card", "account", "fraud", "other"]
+Priority = Literal["high", "normal"]
 
 BRAND_LOCALE: dict[str, Locale] = {"infinitepay": "pt-BR", "jim": "en-US"}
 

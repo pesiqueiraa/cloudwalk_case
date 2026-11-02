@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     platform_url: str = "http://platform-web:8000"
     worker_poll_seconds: float = 0.5
     webhook_max_attempts: int = 10  # esperas 2+4+8+16+32+60x4 = ~5 min antes de desistir
+    classifier: str = "keyword"     # implementação da triagem; "keyword" roda sem chave de API
 
 
 @lru_cache

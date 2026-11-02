@@ -1,0 +1,73 @@
+{"brand": "infinitepay", "text": "Não recebi o pagamento de ontem", "category": "payments", "priority": "normal"}
+{"brand": "infinitepay", "text": "O Pix que meu cliente mandou não caiu na conta", "category": "payments", "priority": "normal"}
+{"brand": "infinitepay", "text": "Quando cai o dinheiro das vendas no crédito?", "category": "payments", "priority": "normal"}
+{"brand": "infinitepay", "text": "Fiz uma venda e o valor não apareceu no saldo", "category": "payments", "priority": "normal"}
+{"brand": "infinitepay", "text": "Quero antecipar meus recebimentos", "category": "payments", "priority": "normal"}
+{"brand": "infinitepay", "text": "Urgente: o depósito das vendas da semana não caiu", "category": "payments", "priority": "high"}
+{"brand": "infinitepay", "text": "A transferência para minha conta bancária está demorando", "category": "payments", "priority": "normal"}
+{"brand": "infinitepay", "text": "Minha maquininha não liga", "category": "hardware", "priority": "normal"}
+{"brand": "infinitepay", "text": "A tela da maquininha está piscando", "category": "hardware", "priority": "normal"}
+{"brand": "infinitepay", "text": "A bateria da maquininha descarrega muito rápido", "category": "hardware", "priority": "normal"}
+{"brand": "infinitepay", "text": "A maquininha não imprime o comprovante", "category": "hardware", "priority": "normal"}
+{"brand": "infinitepay", "text": "O leitor de chip da maquininha parou de funcionar", "category": "hardware", "priority": "normal"}
+{"brand": "infinitepay", "text": "Preciso trocar minha maquininha com defeito urgente, não consigo vender", "category": "hardware", "priority": "high"}
+{"brand": "infinitepay", "text": "Como faço para pedir uma segunda via do cartão?", "category": "card", "priority": "normal"}
+{"brand": "infinitepay", "text": "Qual é o limite do meu cartão de crédito?", "category": "card", "priority": "normal"}
+{"brand": "infinitepay", "text": "Meu cartão chegou e quero desbloquear", "category": "card", "priority": "normal"}
+{"brand": "infinitepay", "text": "A fatura do cartão veio com valor errado", "category": "card", "priority": "normal"}
+{"brand": "infinitepay", "text": "Meu cartão está bloqueado e preciso pagar uma conta hoje", "category": "card", "priority": "high"}
+{"brand": "infinitepay", "text": "Quero cancelar o cartão virtual", "category": "card", "priority": "normal"}
+{"brand": "infinitepay", "text": "Esqueci a senha do aplicativo", "category": "account", "priority": "normal"}
+{"brand": "infinitepay", "text": "Como altero o e-mail do meu cadastro?", "category": "account", "priority": "normal"}
+{"brand": "infinitepay", "text": "Quero mudar a conta bancária cadastrada", "category": "account", "priority": "normal"}
+{"brand": "infinitepay", "text": "Não consigo fazer login no app", "category": "account", "priority": "normal"}
+{"brand": "infinitepay", "text": "Minha conta foi bloqueada e não consigo entrar", "category": "account", "priority": "high"}
+{"brand": "infinitepay", "text": "Preciso atualizar o endereço da minha empresa no cadastro", "category": "account", "priority": "normal"}
+{"brand": "infinitepay", "text": "Caí num golpe e fizeram um Pix da minha conta", "category": "fraud", "priority": "high"}
+{"brand": "infinitepay", "text": "Tem uma compra que eu não reconheço no extrato", "category": "fraud", "priority": "high"}
+{"brand": "infinitepay", "text": "Acho que meu cartão foi clonado", "category": "fraud", "priority": "high"}
+{"brand": "infinitepay", "text": "Recebi uma ligação suspeita pedindo meu código de segurança", "category": "fraud", "priority": "high"}
+{"brand": "infinitepay", "text": "Alguém invadiu minha conta e mudou meus dados", "category": "fraud", "priority": "high"}
+{"brand": "infinitepay", "text": "Quero denunciar uma fraude", "category": "fraud", "priority": "high"}
+{"brand": "infinitepay", "text": "Quero falar com um atendente", "category": "other", "priority": "normal"}
+{"brand": "infinitepay", "text": "Bom dia, tudo bem?", "category": "other", "priority": "normal"}
+{"brand": "infinitepay", "text": "Obrigado pela ajuda", "category": "other", "priority": "normal"}
+{"brand": "infinitepay", "text": "Vocês abrem no feriado?", "category": "other", "priority": "normal"}
+{"brand": "infinitepay", "text": "Quero falar com uma pessoa de verdade", "category": "other", "priority": "normal"}
+{"brand": "infinitepay", "text": "Gostaria de dar uma sugestão para o aplicativo", "category": "other", "priority": "normal"}
+{"brand": "jim", "text": "I didn't get yesterday's payout", "category": "payments", "priority": "normal"}
+{"brand": "jim", "text": "When will my sales money be deposited?", "category": "payments", "priority": "normal"}
+{"brand": "jim", "text": "A customer paid me but the money isn't in my balance", "category": "payments", "priority": "normal"}
+{"brand": "jim", "text": "My transfer to my bank is taking too long", "category": "payments", "priority": "normal"}
+{"brand": "jim", "text": "Can I get my payouts earlier?", "category": "payments", "priority": "normal"}
+{"brand": "jim", "text": "Urgent: this week's deposit never arrived", "category": "payments", "priority": "high"}
+{"brand": "jim", "text": "My card reader won't turn on", "category": "hardware", "priority": "normal"}
+{"brand": "jim", "text": "The reader screen keeps flickering", "category": "hardware", "priority": "normal"}
+{"brand": "jim", "text": "The battery of my card reader dies too fast", "category": "hardware", "priority": "normal"}
+{"brand": "jim", "text": "My reader won't print receipts", "category": "hardware", "priority": "normal"}
+{"brand": "jim", "text": "The chip slot on the reader stopped working", "category": "hardware", "priority": "normal"}
+{"brand": "jim", "text": "Urgent, my card reader is broken and I can't sell", "category": "hardware", "priority": "high"}
+{"brand": "jim", "text": "How do I order a replacement card?", "category": "card", "priority": "normal"}
+{"brand": "jim", "text": "What is my credit card limit?", "category": "card", "priority": "normal"}
+{"brand": "jim", "text": "My new card arrived, how do I activate it?", "category": "card", "priority": "normal"}
+{"brand": "jim", "text": "My card statement shows the wrong amount", "category": "card", "priority": "normal"}
+{"brand": "jim", "text": "My card is locked and I need to pay a bill today", "category": "card", "priority": "high"}
+{"brand": "jim", "text": "I want to cancel my virtual card", "category": "card", "priority": "normal"}
+{"brand": "jim", "text": "I forgot my app password", "category": "account", "priority": "normal"}
+{"brand": "jim", "text": "How do I change the email on my account?", "category": "account", "priority": "normal"}
+{"brand": "jim", "text": "How do I change my bank account?", "category": "account", "priority": "normal"}
+{"brand": "jim", "text": "I can't log in to the app", "category": "account", "priority": "normal"}
+{"brand": "jim", "text": "My account is locked and I can't get in", "category": "account", "priority": "high"}
+{"brand": "jim", "text": "I need to update my business address", "category": "account", "priority": "normal"}
+{"brand": "jim", "text": "I got scammed and someone sent money from my account", "category": "fraud", "priority": "high"}
+{"brand": "jim", "text": "There's a charge on my statement I don't recognize", "category": "fraud", "priority": "high"}
+{"brand": "jim", "text": "I think my card was cloned", "category": "fraud", "priority": "high"}
+{"brand": "jim", "text": "Someone called asking for my security code, it looked like fraud", "category": "fraud", "priority": "high"}
+{"brand": "jim", "text": "Someone hacked my account and changed my details", "category": "fraud", "priority": "high"}
+{"brand": "jim", "text": "I want to report an unauthorized transaction", "category": "fraud", "priority": "high"}
+{"brand": "jim", "text": "I want to talk to a human", "category": "other", "priority": "normal"}
+{"brand": "jim", "text": "Hi there, how are you?", "category": "other", "priority": "normal"}
+{"brand": "jim", "text": "Thanks for the help", "category": "other", "priority": "normal"}
+{"brand": "jim", "text": "Are you open on holidays?", "category": "other", "priority": "normal"}
+{"brand": "jim", "text": "I booked my trip with a travel agency, can I pay with JIM?", "category": "other", "priority": "normal"}
+{"brand": "jim", "text": "I'd like to suggest a feature for the app", "category": "other", "priority": "normal"}
