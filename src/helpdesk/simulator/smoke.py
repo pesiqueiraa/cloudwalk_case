@@ -2,7 +2,8 @@
 
 run_smoke: uma mensagem do chat é classificada, roteada e volta respondida, com a auditoria sob um trace_id.
 run_escalation_smoke: o cliente pede um humano, o agente escala, a conversa passa para a equipe e a
-mensagem seguinte não vai mais ao agente.
+mensagem seguinte não vai mais ao agente. Um analista da equipe assume, responde e encerra; a próxima
+mensagem abre conversa nova, que mostra a anterior na memória do cliente.
 """
 import time
 from datetime import datetime, timezone
@@ -136,3 +137,29 @@ def run_escalation_smoke(platform_url: str, timeout_s: float = 30) -> None:
         print(f"mensagem depois do handoff: trace_id={second['trace_id']}")
         print("linha do tempo da mensagem seguinte:")
         check_timeline(client, second["trace_id"], AFTER_HANDOFF_TIMELINE)
+
+        team_id = client.get(f"/api/cases/{conversation_id}").json()["conversation"]["team_id"]
+        analyst = client.get("/api/admin/analysts", params={"team_id": team_id}).json()[0]
+        print(f"analista: {analyst['name']} (equipe {team_id})")
+        expect_ok(client.post(f"/api/conversations/{conversation_id}/assign", json={"analyst_id": analyst["id"]}))
+        expect_ok(client.post(f"/api/conversations/{conversation_id}/messages",
+                              json={"analyst_id": analyst["id"], "text": "Olá! Sou da equipe e vou te ajudar."}))
+        expect_ok(client.post(f"/api/conversations/{conversation_id}/close", json={"analyst_id": analyst["id"]}))
+        types = [e["type"] for e in client.get(f"/api/cases/{conversation_id}").json()["audit"]]
+        if types[-3:] != ["conversation.assigned", "analyst.replied", "conversation.closed"]:
+            raise SmokeFailure(f"fim da auditoria do caso: {types[-3:]}")
+        print("assumido, respondido e encerrado")
+
+        third = post_chat(client, chat_payload(session_id, "Voltei com outra dúvida"))
+        if third["conversation_id"] == conversation_id:
+            raise SmokeFailure("mensagem depois do encerramento caiu na conversa encerrada")
+        previous = client.get(f"/api/cases/{third['conversation_id']}").json()["previous_conversations"]
+        if conversation_id not in [p["id"] for p in previous]:
+            raise SmokeFailure("a conversa nova não mostra a anterior na memória do cliente")
+        print(f"conversa nova {third['conversation_id']} com {len(previous)} atendimento(s) anterior(es) na memória")
+
+
+def expect_ok(response: httpx.Response) -> None:
+    if not response.is_success:
+        raise SmokeFailure(f"{response.request.method} {response.request.url.path} devolveu "
+                           f"{response.status_code}: {response.text}")

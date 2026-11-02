@@ -178,3 +178,10 @@ CREATE TABLE IF NOT EXISTS discarded_agent_results (
     reason          text NOT NULL,
     discarded_at    timestamptz NOT NULL DEFAULT now()
 );
+
+-- Semana 3, etapa 2: analista que assumiu o caso
+ALTER TABLE conversations
+    ADD COLUMN IF NOT EXISTS assigned_analyst_id uuid REFERENCES analysts (id),
+    ADD COLUMN IF NOT EXISTS assigned_at         timestamptz;
+
+CREATE INDEX IF NOT EXISTS conversations_customer_idx ON conversations (customer_id);  -- memória do cliente

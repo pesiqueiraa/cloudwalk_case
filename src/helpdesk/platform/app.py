@@ -11,7 +11,7 @@ from psycopg_pool import ConnectionPool
 from helpdesk.config import get_settings
 from helpdesk.contracts import AgentResult, ChatInbound, EmailInbound, WhatsAppInbound
 from helpdesk.logs import configure_logging
-from helpdesk.platform import admin, audit, routing
+from helpdesk.platform import admin, analyst, audit, routing
 from helpdesk.platform.agent_results import ConversationNotFound, ResultMismatch, apply_agent_result
 from helpdesk.platform.db import apply_schema
 from helpdesk.platform.deps import get_conn
@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Help Desk — plataforma", lifespan=lifespan)
 app.include_router(admin.router)
+app.include_router(analyst.router)
 
 
 def get_triage(request: Request) -> Classifier:
