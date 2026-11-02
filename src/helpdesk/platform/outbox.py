@@ -90,3 +90,26 @@ def cancel_pending(conn: psycopg.Connection, conversation_id: UUID) -> list[Job]
         (conversation_id,),
     ).fetchall()
     return sorted((Job(**row) for row in rows), key=lambda job: job.id)
+
+
+def list_failed(conn: psycopg.Connection, limit: int = 100) -> list[dict]:
+    """DLQ da plataforma: jobs que desistiram depois de todas as tentativas."""
+    return conn.execute(
+        """
+        SELECT id, event_id, trace_id, conversation_id, attempts, last_error, created_at, payload
+        FROM webhook_jobs WHERE status = 'failed' ORDER BY id LIMIT %s
+        """,
+        (limit,),
+    ).fetchall()
+
+
+def requeue_failed(conn: psycopg.Connection, job_id: int) -> dict | None:
+    """Volta um job 'failed' para 'pending', com tentativas zeradas. Devolve None se não estava 'failed'."""
+    return conn.execute(
+        """
+        UPDATE webhook_jobs SET status = 'pending', attempts = 0, next_attempt_at = now(), last_error = NULL
+        WHERE id = %s AND status = 'failed'
+        RETURNING id, event_id, trace_id, conversation_id
+        """,
+        (job_id,),
+    ).fetchone()

@@ -165,3 +165,47 @@ def test_cancelled_job_is_not_delivered(db):
     assert deliver_once(db, client_with(lambda r: calls.append(r) or httpx.Response(202)), SETTINGS) == 0
     assert calls == []
     assert job(db)["status"] == "cancelled"
+
+
+def test_dead_letters_list_and_retry(db):
+    from fastapi.testclient import TestClient
+
+    from helpdesk.platform.app import app, get_conn
+
+    ingested = ingest_chat(db, chat_inbound())
+    db.execute("UPDATE webhook_jobs SET status = 'failed', attempts = 10, last_error = 'ConnectError'")
+    app.dependency_overrides[get_conn] = lambda: db
+    try:
+        client = TestClient(app)
+        listed = client.get("/api/admin/dead-letters").json()
+        assert [(j["trace_id"], j["attempts"]) for j in listed] == [(str(ingested.trace_id), 10)]
+
+        job_id = listed[0]["id"]
+        assert client.post(f"/api/admin/dead-letters/{job_id}/retry").status_code == 200
+        assert (job(db)["status"], job(db)["attempts"]) == ("pending", 0)
+        assert audit_types(db)[-1] == "message.redelivery_requested"
+        assert client.post(f"/api/admin/dead-letters/{job_id}/retry").status_code == 409
+        assert client.post("/api/admin/dead-letters/999999/retry").status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+    calls = []
+    assert deliver_once(db, client_with(lambda r: calls.append(r) or httpx.Response(202)), SETTINGS) == 1
+    assert job(db)["status"] == "done"
+
+
+def test_dead_letter_retry_refused_after_handoff(db):
+    from fastapi.testclient import TestClient
+
+    from helpdesk.platform.app import app, get_conn
+
+    ingest_chat(db, chat_inbound())
+    db.execute("UPDATE webhook_jobs SET status = 'failed'")
+    db.execute("UPDATE conversations SET handled_by = 'human', status = 'escalated'")
+    app.dependency_overrides[get_conn] = lambda: db
+    try:
+        job_id = job(db)["id"]
+        assert TestClient(app).post(f"/api/admin/dead-letters/{job_id}/retry").status_code == 409
+    finally:
+        app.dependency_overrides.clear()
+    assert job(db)["status"] == "failed"

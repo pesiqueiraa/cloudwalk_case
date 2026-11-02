@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from helpdesk.contracts import Brand, Category, Channel, Priority
+from helpdesk.platform import audit, outbox
 from helpdesk.platform.deps import get_conn
 
 FirstResponder = Literal["agent", "human"]
@@ -238,3 +239,35 @@ def _check_rule_target(conn: psycopg.Connection, brand_id: str | None, queue_id:
         raise unprocessable("a fila de destino está desativada")
     if brand_id is not None and brand_id != queue["brand_id"]:
         raise unprocessable("a marca da regra é diferente da marca da fila de destino")
+
+
+# DLQ da plataforma: webhooks que desistiram depois de todas as tentativas
+
+@router.get("/dead-letters")
+def list_dead_letters(limit: int = 100, conn: psycopg.Connection = Depends(get_conn)) -> list[dict]:
+    return outbox.list_failed(conn, max(1, min(limit, 500)))
+
+
+@router.post("/dead-letters/{job_id}/retry")
+def retry_dead_letter(job_id: int, conn: psycopg.Connection = Depends(get_conn)) -> dict:
+    """Devolve o job à fila. Não reenvia se a conversa já está com humano ou encerrada (handoff manda)."""
+    with conn.transaction():
+        job = conn.execute(
+            "SELECT conversation_id, status FROM webhook_jobs WHERE id = %s FOR UPDATE", (job_id,)
+        ).fetchone()
+        if job is None:
+            raise HTTPException(status_code=404, detail="job não encontrado")
+        if job["status"] != "failed":
+            raise HTTPException(status_code=409, detail=f"job está '{job['status']}', não 'failed'")
+        conversation = conn.execute(
+            "SELECT handled_by, status FROM conversations WHERE id = %s", (job["conversation_id"],)
+        ).fetchone()
+        if conversation and (conversation["handled_by"] == "human" or conversation["status"] == "closed"):
+            raise HTTPException(status_code=409, detail="conversa com a equipe humana ou encerrada: não vai ao agente")
+        requeued = outbox.requeue_failed(conn, job_id)
+        audit.record(
+            conn, type="message.redelivery_requested", trace_id=requeued["trace_id"],
+            conversation_id=requeued["conversation_id"], actor="operator",
+            payload={"job_id": job_id, "event_id": str(requeued["event_id"])},
+        )
+        return {"id": job_id, "status": "pending"}
