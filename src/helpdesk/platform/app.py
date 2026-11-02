@@ -6,6 +6,7 @@ from uuid import UUID
 
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -44,6 +45,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Help Desk — plataforma", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware, allow_origins=get_settings().cors_origins,
+    allow_methods=["GET", "POST", "PATCH"], allow_headers=["Content-Type"],
+)
 app.include_router(admin.router)
 app.include_router(analyst.router)
 

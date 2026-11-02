@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = 0.5
     webhook_max_attempts: int = 10  # esperas 2+4+8+16+32+60x4 = ~5 min antes de desistir
     classifier: str = "keyword"     # implementação da triagem; "keyword" roda sem chave de API
+    cors_origins: list[str] = ["http://localhost:5173"]  # telas em React; só elas chamam a API pelo navegador
 
 
 @lru_cache

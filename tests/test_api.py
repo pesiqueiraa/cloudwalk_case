@@ -111,3 +111,11 @@ def test_late_reply_returns_200_discarded(client):
 
     conversation = client.get(f"/api/conversations/{first['conversation_id']}").json()["conversation"]
     assert (conversation["handled_by"], conversation["escalation_summary"]) == ("human", "Ana pediu humano")
+
+
+def test_cors_allows_frontend_origin_only(client):
+    allowed = client.options("/api/conversations", headers={
+        "Origin": "http://localhost:5173", "Access-Control-Request-Method": "PATCH"})
+    assert allowed.headers["access-control-allow-origin"] == "http://localhost:5173"
+    other = client.get("/api/conversations", headers={"Origin": "http://evil.example"})
+    assert "access-control-allow-origin" not in other.headers
