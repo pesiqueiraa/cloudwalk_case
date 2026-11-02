@@ -1,7 +1,7 @@
 """Simulador de canais. Uso:
     python -m helpdesk.simulator.main send [--channel chat|whatsapp|email] [--brand infinitepay|jim]
                                            [--category payments|hardware|card|account|fraud|other] [--text "..."]
-    python -m helpdesk.simulator.main smoke
+    python -m helpdesk.simulator.main smoke [--escalation]
 """
 import argparse
 import json
@@ -16,7 +16,7 @@ import httpx
 from helpdesk.config import get_settings
 from helpdesk.contracts import Category
 from helpdesk.simulator.data import CUSTOMERS
-from helpdesk.simulator.smoke import SmokeFailure, run_smoke
+from helpdesk.simulator.smoke import SmokeFailure, run_escalation_smoke, run_smoke
 from helpdesk.triage.dataset import load_labeled_messages
 
 
@@ -61,6 +61,8 @@ def main() -> int:
     send_cmd.add_argument("--text", help="texto fixo; tem prioridade sobre --category")
     smoke_cmd = commands.add_parser("smoke", help="smoke test ponta a ponta")
     smoke_cmd.add_argument("--timeout", type=float, default=30)
+    smoke_cmd.add_argument("--escalation", action="store_true",
+                           help="cliente pede humano: confere o handoff e o bloqueio do agente")
     args = parser.parse_args()
 
     platform_url = get_settings().platform_url
@@ -68,7 +70,7 @@ def main() -> int:
         print(json.dumps(send(platform_url, args.channel, args.brand, args.text, args.category), indent=2))
         return 0
     try:
-        run_smoke(platform_url, args.timeout)
+        (run_escalation_smoke if args.escalation else run_smoke)(platform_url, args.timeout)
     except (SmokeFailure, httpx.HTTPError) as exc:
         print(f"SMOKE FALHOU: {exc}")
         return 1
