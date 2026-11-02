@@ -109,6 +109,16 @@ services:
       redpanda-init:
         condition: service_completed_successfully
 
+  frontend:
+    build: ./frontend
+    image: helpdesk-frontend
+    ports:
+      - "5173:5173"
+    restart: on-failure
+    depends_on:
+      platform-web:
+        condition: service_healthy
+
   simulator:
     <<: *app
     profiles: [tools]
