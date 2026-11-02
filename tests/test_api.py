@@ -29,7 +29,7 @@ def test_api_flow(client):
 
     conversation = client.get(f"/api/conversations/{ingested['conversation_id']}").json()
     assert [(m["direction"], m["author"]) for m in conversation["messages"]] == [("in", "customer"), ("out", "agent")]
-    assert [e["type"] for e in conversation["audit"]] == ["message.received", "agent.replied"]
+    assert [e["type"] for e in conversation["audit"]] == ["message.received", "message.classified", "conversation.routed", "agent.replied"]
     assert conversation["conversation"]["status"] == "open"
 
     trace = client.get(f"/api/traces/{ingested['trace_id']}/audit").json()
@@ -67,3 +67,18 @@ def test_whatsapp_and_email_endpoints(client):
     email = client.post("/channels/email/messages", content=email_inbound().model_dump_json())
     assert (wa.status_code, email.status_code) == (202, 202)
     assert wa.json()["conversation_id"] != email.json()["conversation_id"]
+
+
+def test_queue_conversations_ordered_by_priority_then_age(client):
+    queue_id = "10000000-0000-0000-0000-000000000002"
+    texts = ["Não recebi o pagamento", "Urgente: não recebi o pagamento", "O Pix não caiu"]
+    ids = [client.post("/channels/chat/messages",
+                       content=chat_inbound(text=t).model_dump_json()).json()["conversation_id"] for t in texts]
+
+    response = client.get(f"/api/queues/{queue_id}/conversations")
+    assert response.status_code == 200
+    assert [c["id"] for c in response.json()] == [ids[1], ids[0], ids[2]]
+
+
+def test_queue_conversations_unknown_queue(client):
+    assert client.get(f"/api/queues/{uuid4()}/conversations").status_code == 404

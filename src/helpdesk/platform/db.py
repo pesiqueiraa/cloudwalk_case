@@ -10,6 +10,8 @@ def connect(url: str) -> psycopg.Connection:
 
 
 def apply_schema(conn: psycopg.Connection) -> None:
-    sql = files("helpdesk.platform").joinpath("schema.sql").read_text()
+    """Aplica o esquema e o seed, os dois idempotentes, numa transação só."""
+    package = files("helpdesk.platform")
     with conn.transaction():
-        conn.execute(sql)
+        conn.execute(package.joinpath("schema.sql").read_text())
+        conn.execute(package.joinpath("seed.sql").read_text())

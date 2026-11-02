@@ -22,7 +22,7 @@ def test_apply_reply_creates_message_and_audit(db):
 
     message = db.execute("SELECT * FROM messages WHERE direction = 'out'").fetchone()
     assert (message["author"], message["text"], message["trace_id"]) == ("agent", "Olá, Ana!", ingested.trace_id)
-    assert audit_types(db) == ["message.received", "agent.replied"]
+    assert audit_types(db) == ["message.received", "message.classified", "conversation.routed", "agent.replied"]
 
 
 def test_apply_twice_is_noop(db):
@@ -42,7 +42,7 @@ def test_escalation_sets_status_and_audits(db):
 
     status = db.execute("SELECT status FROM conversations").fetchone()["status"]
     assert status == "escalated"
-    assert audit_types(db) == ["message.received", "agent.replied", "conversation.escalated"]
+    assert audit_types(db) == ["message.received", "message.classified", "conversation.routed", "agent.replied", "conversation.escalated"]
     escalated = db.execute("SELECT payload FROM audit_events WHERE type = 'conversation.escalated'").fetchone()
     assert escalated["payload"]["reason"] == "cliente pediu atendimento humano"
 

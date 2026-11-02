@@ -84,3 +84,59 @@ CREATE TABLE IF NOT EXISTS webhook_jobs (
 
 CREATE INDEX IF NOT EXISTS webhook_jobs_due_idx ON webhook_jobs (next_attempt_at) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS webhook_jobs_conversation_idx ON webhook_jobs (conversation_id, id) WHERE status = 'pending';
+
+-- Semana 2: equipes, filas e regras de roteamento. Filas e regras nunca são apagadas, só desativadas.
+
+CREATE TABLE IF NOT EXISTS teams (
+    id   text PRIMARY KEY,
+    name text NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS analysts (
+    id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id text NOT NULL REFERENCES teams (id),
+    name    text NOT NULL,
+    email   text NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS queues (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            text NOT NULL UNIQUE,
+    brand_id        text NOT NULL REFERENCES brands (id),
+    team_id         text NOT NULL REFERENCES teams (id),
+    first_responder text NOT NULL CHECK (first_responder IN ('agent', 'human')),
+    is_default      boolean NOT NULL DEFAULT false,  -- recebe o que nenhuma regra casou
+    active          boolean NOT NULL DEFAULT true,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS queues_one_default_per_brand ON queues (brand_id) WHERE is_default AND active;
+
+CREATE TABLE IF NOT EXISTS routing_rules (
+    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       text NOT NULL,
+    position   int NOT NULL,                         -- ordem de avaliação: vale a primeira que casa
+    -- Condições: nulo casa qualquer valor
+    brand_id   text REFERENCES brands (id),
+    channel    text CHECK (channel IN ('chat', 'whatsapp', 'email')),
+    category   text CHECK (category IN ('payments', 'hardware', 'card', 'account', 'fraud', 'other')),
+    priority   text CHECK (priority IN ('high', 'normal')),
+    queue_id   uuid NOT NULL REFERENCES queues (id),
+    active     boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Colunas novas em tabelas da semana 1: ADD COLUMN IF NOT EXISTS evita zerar o banco
+ALTER TABLE messages
+    ADD COLUMN IF NOT EXISTS category text,
+    ADD COLUMN IF NOT EXISTS priority text;
+
+ALTER TABLE conversations
+    ADD COLUMN IF NOT EXISTS queue_id   uuid REFERENCES queues (id),
+    ADD COLUMN IF NOT EXISTS priority   text,
+    ADD COLUMN IF NOT EXISTS handled_by text,   -- quem atende primeiro: 'agent' ou 'human', vindo da fila
+    ADD COLUMN IF NOT EXISTS routed_at  timestamptz;
+
+CREATE INDEX IF NOT EXISTS conversations_queue_idx ON conversations (queue_id);
