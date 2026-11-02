@@ -20,13 +20,28 @@ ESCALATION = {
     "en-US": ("Sure, {name}. I'm transferring you to a specialist.", "customer asked for a human"),
 }
 
+SUMMARY = {
+    "pt-BR": "{name} ({channel}) pediu atendimento humano. Última mensagem: “{text}”",
+    "en-US": "{name} ({channel}) asked for a human. Last message: “{text}”",
+}
+SUMMARY_MAX = 280
+
+
+def summarize(req: AgentRequest) -> str:
+    """Resumo por regra fixa para o analista: quem, por qual canal e o que disse por último."""
+    summary = SUMMARY[req.locale].format(name=req.customer_name, channel=req.channel, text=" ".join(req.text.split()))
+    if len(summary) <= SUMMARY_MAX:
+        return summary
+    return summary[: SUMMARY_MAX - 2] + "…”"
+
 
 def decide(req: AgentRequest) -> AgentResult:
     escalate = ESCALATION_TERMS[req.locale].search(req.text) is not None
     if escalate:
         template, reason = ESCALATION[req.locale]
+        summary = summarize(req)
     else:
-        template, reason = REPLY[req.locale], None
+        template, reason, summary = REPLY[req.locale], None, None
 
     return AgentResult(
         # Derivado da requisição: uma reentrega gera o mesmo event_id e a plataforma descarta a cópia
@@ -37,5 +52,6 @@ def decide(req: AgentRequest) -> AgentResult:
         in_reply_to=req.message_id,
         text=template.format(name=req.customer_name),
         reason=reason,
+        summary=summary,
         occurred_at=datetime.now(timezone.utc),
     )

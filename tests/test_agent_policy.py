@@ -1,4 +1,4 @@
-from helpdesk.agent_mock.policy import decide
+from helpdesk.agent_mock.policy import SUMMARY_MAX, decide
 from tests.factories import agent_request
 
 
@@ -45,3 +45,25 @@ def test_does_not_escalate_on_partial_word():
     for text in ("I booked with a travel agency", "Your agents are great", "A chemical reagent spilled"):
         result = decide(agent_request(brand="jim", locale="en-US", text=text))
         assert result.event_type == "agent.replied", text
+
+
+def test_escalation_has_deterministic_summary():
+    req = agent_request(customer_name="Ana", channel="whatsapp", text="Quero falar com um atendente")
+    result = decide(req)
+    assert result.summary == "Ana (whatsapp) pediu atendimento humano. Última mensagem: “Quero falar com um atendente”"
+    assert decide(req).summary == result.summary
+
+
+def test_summary_in_english():
+    result = decide(agent_request(brand="jim", locale="en-US", customer_name="John", text="I want a human"))
+    assert result.summary == "John (chat) asked for a human. Last message: “I want a human”"
+
+
+def test_long_summary_is_clipped():
+    result = decide(agent_request(text="Quero falar com um atendente. " + "Blá " * 500))
+    assert len(result.summary) == SUMMARY_MAX
+    assert result.summary.endswith("…”")
+
+
+def test_reply_has_no_summary():
+    assert decide(agent_request()).summary is None

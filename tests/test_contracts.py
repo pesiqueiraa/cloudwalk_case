@@ -25,3 +25,16 @@ def test_agent_request_requires_trace_id():
     del data["trace_id"]
     with pytest.raises(ValidationError):
         AgentRequest(**data)
+
+
+def test_escalation_requires_reason_and_summary():
+    with pytest.raises(ValidationError):
+        agent_result(event_type="agent.escalated", reason="cliente pediu atendimento humano")
+    with pytest.raises(ValidationError):
+        agent_result(event_type="agent.escalated", summary="Ana pediu atendimento humano")
+    result = agent_result(event_type="agent.escalated", reason="motivo", summary="resumo")
+    assert result.summary == "resumo"
+
+
+def test_reply_does_not_need_summary():
+    assert agent_result().summary is None

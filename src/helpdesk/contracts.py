@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 Brand = Literal["infinitepay", "jim"]
 Locale = Literal["pt-BR", "en-US"]
@@ -80,4 +80,12 @@ class AgentResult(BaseModel):
     in_reply_to: UUID
     text: Text
     reason: str | None = None
+    # Resumo para o analista que assume o caso; obrigatório na escalação
+    summary: Annotated[str, Field(max_length=500)] | None = None
     occurred_at: datetime
+
+    @model_validator(mode="after")
+    def _escalation_has_context(self) -> "AgentResult":
+        if self.event_type == "agent.escalated" and not (self.reason and self.summary):
+            raise ValueError("agent.escalated precisa de reason e summary")
+        return self
