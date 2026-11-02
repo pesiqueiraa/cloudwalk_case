@@ -200,3 +200,25 @@ def test_duplicate_is_not_reclassified(db):
     before = count(db, "SELECT count(*) AS n FROM audit_events")
     ingest_chat(db, payload)
     assert count(db, "SELECT count(*) AS n FROM audit_events") == before
+
+
+def test_closed_conversation_opens_new_one(db):
+    first = ingest_chat(db, chat_inbound(session_id="sess-1", message_id="m-1", text="Não recebi o pagamento"))
+    db.execute("UPDATE conversations SET status = 'closed', closed_at = now() WHERE id = %s",
+               (first.conversation_id,))
+
+    second = ingest_chat(db, chat_inbound(session_id="sess-1", message_id="m-2", text="Minha maquininha não liga"))
+
+    assert second.conversation_id != first.conversation_id
+    assert second.queue_id != first.queue_id  # roteada do zero
+    assert count(db, "SELECT count(*) AS n FROM webhook_jobs WHERE conversation_id = %s",
+                 second.conversation_id) == 1
+    statuses = {r["id"]: r["status"] for r in db.execute("SELECT id, status FROM conversations")}
+    assert statuses == {first.conversation_id: "closed", second.conversation_id: "open"}
+
+
+def test_escalated_conversation_is_reused(db):
+    first = ingest_chat(db, chat_inbound(session_id="sess-1", message_id="m-1"))
+    db.execute("UPDATE conversations SET status = 'escalated', handled_by = 'human'")
+    second = ingest_chat(db, chat_inbound(session_id="sess-1", message_id="m-2"))
+    assert second.conversation_id == first.conversation_id

@@ -151,3 +151,17 @@ def test_connect_with_retry_survives_slow_database():
 
     assert connect_with_retry("db-url", connect_fn=flaky_connect, sleep=lambda s: None) == "conn"
     assert len(calls) == 3
+
+
+def test_cancelled_job_is_not_delivered(db):
+    from helpdesk.platform import outbox
+
+    ingested = ingest_chat(db, chat_inbound())
+    cancelled = outbox.cancel_pending(db, ingested.conversation_id)
+    assert [j.trace_id for j in cancelled] == [ingested.trace_id]
+    assert outbox.cancel_pending(db, ingested.conversation_id) == []
+
+    calls = []
+    assert deliver_once(db, client_with(lambda r: calls.append(r) or httpx.Response(202)), SETTINGS) == 0
+    assert calls == []
+    assert job(db)["status"] == "cancelled"

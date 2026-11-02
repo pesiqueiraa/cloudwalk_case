@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     channel             text NOT NULL,
     external_session_id text NOT NULL,
     status              text NOT NULL DEFAULT 'open',
-    created_at          timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (brand_id, channel, external_session_id)
+    created_at          timestamptz NOT NULL DEFAULT now()
+    -- Unicidade da sessão: índice parcial conversations_one_open_per_session, mais abaixo
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS webhook_jobs (
     trace_id        uuid NOT NULL,
     conversation_id uuid NOT NULL,         -- um job por vez por conversa, para manter a ordem
     payload         jsonb NOT NULL,
-    status          text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'failed')),
+    status          text NOT NULL DEFAULT 'pending',  -- CHECK mais abaixo
     attempts        int NOT NULL DEFAULT 0,
     next_attempt_at timestamptz NOT NULL DEFAULT now(),
     last_error      text,
@@ -140,3 +140,41 @@ ALTER TABLE conversations
     ADD COLUMN IF NOT EXISTS routed_at  timestamptz;
 
 CREATE INDEX IF NOT EXISTS conversations_queue_idx ON conversations (queue_id);
+
+-- Semana 3: handoff
+
+ALTER TABLE queues
+    ADD COLUMN IF NOT EXISTS escalation_queue_id uuid REFERENCES queues (id);  -- nulo: escala na própria fila
+
+ALTER TABLE conversations
+    ADD COLUMN IF NOT EXISTS escalated_at       timestamptz,
+    ADD COLUMN IF NOT EXISTS escalation_reason  text,
+    ADD COLUMN IF NOT EXISTS escalation_summary text,
+    ADD COLUMN IF NOT EXISTS closed_at          timestamptz;
+
+-- CHECKs trocados por DROP + ADD: o banco de uma semana anterior ganha os valores novos sem down -v
+ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_status_check;
+ALTER TABLE conversations ADD CONSTRAINT conversations_status_check
+    CHECK (status IN ('open', 'escalated', 'closed'));
+
+ALTER TABLE webhook_jobs DROP CONSTRAINT IF EXISTS webhook_jobs_status_check;
+ALTER TABLE webhook_jobs ADD CONSTRAINT webhook_jobs_status_check
+    CHECK (status IN ('pending', 'done', 'failed', 'cancelled'));  -- cancelled: conversa foi para humano
+
+-- Uma conversa não encerrada por sessão. Encerrada, a próxima mensagem do canal abre outra.
+-- A ingestão repete este predicado no ON CONFLICT.
+ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_brand_id_channel_external_session_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_one_open_per_session
+    ON conversations (brand_id, channel, external_session_id) WHERE status <> 'closed';
+
+-- Respostas do agente que chegaram depois do handoff: guardadas para auditoria, nunca entregues
+CREATE TABLE IF NOT EXISTS discarded_agent_results (
+    event_id        uuid PRIMARY KEY,                -- idempotência: a reentrega não gera outro descarte
+    conversation_id uuid NOT NULL REFERENCES conversations (id),
+    trace_id        uuid NOT NULL,
+    in_reply_to     uuid NOT NULL,
+    event_type      text NOT NULL,
+    text            text NOT NULL,
+    reason          text NOT NULL,
+    discarded_at    timestamptz NOT NULL DEFAULT now()
+);

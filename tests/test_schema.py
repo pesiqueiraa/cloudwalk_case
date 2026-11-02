@@ -58,3 +58,38 @@ def test_schema_upgrade_adds_columns_to_week1_tables(db):
         assert ("conversations", column) in columns
     for column in ("category", "priority"):
         assert ("messages", column) in columns
+
+
+def test_schema_upgrade_from_week2_keeps_data_and_relaxes_uniqueness(db):
+    db.execute("DROP SCHEMA public CASCADE")
+    db.execute("CREATE SCHEMA public")
+    # Formato da semana 2: conversa única por sessão e jobs sem 'cancelled'
+    db.execute("""
+        CREATE TABLE brands (id text PRIMARY KEY, name text NOT NULL, locale text NOT NULL);
+        CREATE TABLE conversations (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), brand_id text NOT NULL,
+            customer_id uuid NOT NULL, channel text NOT NULL, external_session_id text NOT NULL,
+            status text NOT NULL DEFAULT 'open', UNIQUE (brand_id, channel, external_session_id));
+        CREATE TABLE webhook_jobs (id bigserial PRIMARY KEY, event_id uuid NOT NULL UNIQUE, trace_id uuid NOT NULL,
+            conversation_id uuid NOT NULL, payload jsonb NOT NULL,
+            status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'failed')),
+            attempts int NOT NULL DEFAULT 0, next_attempt_at timestamptz NOT NULL DEFAULT now(), last_error text);
+        INSERT INTO conversations (brand_id, customer_id, channel, external_session_id)
+            VALUES ('jim', gen_random_uuid(), 'chat', 's-1');
+    """)
+    apply_schema(db)
+    apply_schema(db)  # idempotente
+
+    db.execute("UPDATE conversations SET status = 'closed'")
+    db.execute("INSERT INTO conversations (brand_id, customer_id, channel, external_session_id) "
+               "VALUES ('jim', gen_random_uuid(), 'chat', 's-1')")
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        db.execute("INSERT INTO conversations (brand_id, customer_id, channel, external_session_id) "
+                   "VALUES ('jim', gen_random_uuid(), 'chat', 's-1')")
+
+
+def test_job_status_accepts_cancelled_and_rejects_unknown(db):
+    insert = ("INSERT INTO webhook_jobs (event_id, trace_id, conversation_id, payload, status) "
+              "VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), '{}', %s)")
+    db.execute(insert, ("cancelled",))
+    with pytest.raises(psycopg.errors.CheckViolation):
+        db.execute(insert, ("lost",))

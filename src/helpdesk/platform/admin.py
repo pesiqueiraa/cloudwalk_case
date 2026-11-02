@@ -15,7 +15,7 @@ from helpdesk.platform.deps import get_conn
 FirstResponder = Literal["agent", "human"]
 Name = Annotated[str, Field(min_length=1, max_length=120)]
 
-QUEUE_FIELDS = ("name", "team_id", "first_responder", "is_default", "active")
+QUEUE_FIELDS = ("name", "team_id", "first_responder", "is_default", "active", "escalation_queue_id")
 RULE_FIELDS = ("name", "position", "brand_id", "channel", "category", "priority", "queue_id", "active")
 
 
@@ -25,6 +25,7 @@ class QueueIn(BaseModel):
     team_id: str
     first_responder: FirstResponder
     is_default: bool = False
+    escalation_queue_id: UUID | None = None   # para onde vão as escalações; nulo = a própria fila
 
 
 class QueuePatch(BaseModel):
@@ -33,6 +34,7 @@ class QueuePatch(BaseModel):
     first_responder: FirstResponder | None = None
     is_default: bool | None = None
     active: bool | None = None
+    escalation_queue_id: UUID | None = None   # null limpa
 
 
 class RuleIn(BaseModel):
@@ -98,15 +100,18 @@ def list_queues(brand: Brand | None = None, active: bool | None = None,
 def create_queue(body: QueueIn, conn: psycopg.Connection = Depends(get_conn)) -> dict:
     with conn.transaction():
         _check_team(conn, body.team_id)
+        if body.escalation_queue_id is not None:
+            _check_escalation_target(conn, body.brand_id, body.escalation_queue_id)
         if body.is_default:
             _clear_default(conn, body.brand_id)
         try:
             return conn.execute(
                 """
-                INSERT INTO queues (name, brand_id, team_id, first_responder, is_default)
-                VALUES (%s, %s, %s, %s, %s) RETURNING *
+                INSERT INTO queues (name, brand_id, team_id, first_responder, is_default, escalation_queue_id)
+                VALUES (%s, %s, %s, %s, %s, %s) RETURNING *
                 """,
-                (body.name, body.brand_id, body.team_id, body.first_responder, body.is_default),
+                (body.name, body.brand_id, body.team_id, body.first_responder, body.is_default,
+                 body.escalation_queue_id),
             ).fetchone()
         except psycopg.errors.UniqueViolation:
             raise HTTPException(status_code=409, detail="já existe uma fila com esse nome")
@@ -119,10 +124,13 @@ def update_queue(queue_id: UUID, body: QueuePatch, conn: psycopg.Connection = De
         current = conn.execute("SELECT * FROM queues WHERE id = %s FOR UPDATE", (queue_id,)).fetchone()
         if current is None:
             raise HTTPException(status_code=404, detail="fila não encontrada")
-        new = {**current, **{k: v for k, v in changes.items() if v is not None}}
+        # Nulo em escalation_queue_id limpa o destino; nos outros campos, nulo é ignorado
+        new = {**current, **{k: v for k, v in changes.items() if v is not None or k == "escalation_queue_id"}}
 
         if "team_id" in changes:
             _check_team(conn, new["team_id"])
+        if new["escalation_queue_id"] is not None and "escalation_queue_id" in changes:
+            _check_escalation_target(conn, current["brand_id"], new["escalation_queue_id"], queue_id)
         if current["is_default"] and current["active"] and not (new["is_default"] and new["active"]):
             raise unprocessable("esta é a fila padrão da marca: marque outra fila como padrão antes")
         if new["is_default"] and not new["active"]:
@@ -134,7 +142,7 @@ def update_queue(queue_id: UUID, body: QueuePatch, conn: psycopg.Connection = De
             return conn.execute(
                 """
                 UPDATE queues SET name = %s, team_id = %s, first_responder = %s, is_default = %s, active = %s,
-                                  updated_at = now()
+                                  escalation_queue_id = %s, updated_at = now()
                 WHERE id = %s RETURNING *
                 """,
                 (*(new[f] for f in QUEUE_FIELDS), queue_id),
@@ -146,6 +154,19 @@ def update_queue(queue_id: UUID, body: QueuePatch, conn: psycopg.Connection = De
 def _check_team(conn: psycopg.Connection, team_id: str) -> None:
     if conn.execute("SELECT 1 FROM teams WHERE id = %s", (team_id,)).fetchone() is None:
         raise unprocessable(f"equipe inexistente: {team_id}")
+
+
+def _check_escalation_target(conn: psycopg.Connection, brand_id: str, target_id: UUID,
+                             queue_id: UUID | None = None) -> None:
+    if target_id == queue_id:
+        raise unprocessable("a fila de escalas não pode ser a própria fila; deixe nulo para escalar nela")
+    target = conn.execute("SELECT brand_id, active FROM queues WHERE id = %s", (target_id,)).fetchone()
+    if target is None:
+        raise unprocessable(f"fila de escalas inexistente: {target_id}")
+    if not target["active"]:
+        raise unprocessable("a fila de escalas está desativada")
+    if target["brand_id"] != brand_id:
+        raise unprocessable("a fila de escalas é de outra marca")
 
 
 def _clear_default(conn: psycopg.Connection, brand_id: str) -> None:

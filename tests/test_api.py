@@ -25,7 +25,7 @@ def test_api_flow(client):
                           in_reply_to=ingested["message_id"])
     callback = client.post("/internal/agent-results", content=result.model_dump_json())
     assert callback.status_code == 200
-    assert callback.json() == {"applied": True}
+    assert callback.json() == {"applied": True, "outcome": "applied"}
 
     conversation = client.get(f"/api/conversations/{ingested['conversation_id']}").json()
     assert [(m["direction"], m["author"]) for m in conversation["messages"]] == [("in", "customer"), ("out", "agent")]
@@ -42,7 +42,7 @@ def test_duplicate_callback_returns_applied_false(client):
                           in_reply_to=ingested["message_id"])
     client.post("/internal/agent-results", content=result.model_dump_json())
     second = client.post("/internal/agent-results", content=result.model_dump_json())
-    assert (second.status_code, second.json()) == (200, {"applied": False})
+    assert (second.status_code, second.json()) == (200, {"applied": False, "outcome": "duplicate"})
 
 
 def test_callback_unknown_conversation_returns_404(client):
@@ -82,3 +82,32 @@ def test_queue_conversations_ordered_by_priority_then_age(client):
 
 def test_queue_conversations_unknown_queue(client):
     assert client.get(f"/api/queues/{uuid4()}/conversations").status_code == 404
+
+
+def test_callback_for_wrong_message_returns_422(client):
+    mine = client.post("/channels/chat/messages", content=chat_inbound().model_dump_json()).json()
+    other = client.post("/channels/chat/messages", content=chat_inbound().model_dump_json()).json()
+    result = agent_result(trace_id=mine["trace_id"], conversation_id=mine["conversation_id"],
+                          in_reply_to=other["message_id"])
+    response = client.post("/internal/agent-results", content=result.model_dump_json())
+    assert response.status_code == 422
+
+
+def test_late_reply_returns_200_discarded(client):
+    session = f"sess-{uuid4()}"
+    first = client.post("/channels/chat/messages",
+                        content=chat_inbound(session_id=session).model_dump_json()).json()
+    second = client.post("/channels/chat/messages",
+                         content=chat_inbound(session_id=session, text="Alô?").model_dump_json()).json()
+    escalation = agent_result(trace_id=first["trace_id"], conversation_id=first["conversation_id"],
+                              in_reply_to=first["message_id"], event_type="agent.escalated",
+                              reason="cliente pediu atendimento humano", summary="Ana pediu humano")
+    assert client.post("/internal/agent-results", content=escalation.model_dump_json()).json()["outcome"] == "applied"
+
+    late = agent_result(trace_id=second["trace_id"], conversation_id=second["conversation_id"],
+                        in_reply_to=second["message_id"])
+    response = client.post("/internal/agent-results", content=late.model_dump_json())
+    assert (response.status_code, response.json()) == (200, {"applied": False, "outcome": "discarded"})
+
+    conversation = client.get(f"/api/conversations/{first['conversation_id']}").json()["conversation"]
+    assert (conversation["handled_by"], conversation["escalation_summary"]) == ("human", "Ana pediu humano")

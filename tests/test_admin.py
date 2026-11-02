@@ -159,3 +159,45 @@ def test_patch_rule_validates_new_queue(client):
 
 def test_patch_unknown_rule(client):
     assert client.patch(f"/api/admin/routing-rules/{uuid4()}", json={"active": False}).status_code == 404
+
+
+# Fila de escalas
+
+IP_SECURITY = "10000000-0000-0000-0000-000000000004"
+JIM_SECURITY = "10000000-0000-0000-0000-000000000014"
+
+
+def test_create_queue_with_escalation_queue(client):
+    response = new_queue(client, escalation_queue_id=IP_SECURITY)
+    assert response.status_code == 201
+    assert response.json()["escalation_queue_id"] == IP_SECURITY
+
+
+def test_patch_sets_and_clears_escalation_queue(client):
+    response = client.patch(f"/api/admin/queues/{IP_PAYMENTS}", json={"escalation_queue_id": IP_SECURITY})
+    assert (response.status_code, response.json()["escalation_queue_id"]) == (200, IP_SECURITY)
+
+    renamed = client.patch(f"/api/admin/queues/{IP_PAYMENTS}", json={"name": "InfinitePay · Pix"})
+    assert renamed.json()["escalation_queue_id"] == IP_SECURITY  # campo ausente fica como está
+
+    cleared = client.patch(f"/api/admin/queues/{IP_PAYMENTS}", json={"escalation_queue_id": None})
+    assert (cleared.status_code, cleared.json()["escalation_queue_id"]) == (200, None)
+
+
+@pytest.mark.parametrize("target, detail", [
+    (JIM_SECURITY, "outra marca"),
+    (IP_PAYMENTS, "própria fila"),
+    (str(uuid4()), "inexistente"),
+])
+def test_patch_rejects_invalid_escalation_queue(client, target, detail):
+    response = client.patch(f"/api/admin/queues/{IP_PAYMENTS}", json={"escalation_queue_id": target})
+    assert response.status_code == 422
+    assert detail in response.json()["detail"]
+
+
+def test_escalation_queue_must_be_active(client):
+    inactive = new_queue(client).json()
+    client.patch(f"/api/admin/queues/{inactive['id']}", json={"active": False})
+    response = new_queue(client, escalation_queue_id=inactive["id"])
+    assert response.status_code == 422
+    assert "desativada" in response.json()["detail"]

@@ -12,7 +12,7 @@ from helpdesk.config import get_settings
 from helpdesk.contracts import AgentResult, ChatInbound, EmailInbound, WhatsAppInbound
 from helpdesk.logs import configure_logging
 from helpdesk.platform import admin, audit, routing
-from helpdesk.platform.agent_results import ConversationNotFound, apply_agent_result
+from helpdesk.platform.agent_results import ConversationNotFound, ResultMismatch, apply_agent_result
 from helpdesk.platform.db import apply_schema
 from helpdesk.platform.deps import get_conn
 from helpdesk.platform.ingestion import DEFAULT_CLASSIFIER, ingest, normalize_chat, normalize_email, normalize_whatsapp
@@ -74,10 +74,13 @@ def receive_email(payload: EmailInbound, conn: psycopg.Connection = Conn,
 @app.post("/internal/agent-results")
 def receive_agent_result(result: AgentResult, conn: psycopg.Connection = Conn) -> dict:
     try:
-        applied = apply_agent_result(conn, result)
+        outcome = apply_agent_result(conn, result)
     except ConversationNotFound:
         raise HTTPException(status_code=404, detail="conversa não encontrada")
-    return {"applied": applied}
+    except ResultMismatch as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    # Descarte também é 200: o broker não deve tentar de novo uma resposta que chegou tarde
+    return {"applied": outcome == "applied", "outcome": outcome}
 
 
 @app.get("/api/conversations/{conversation_id}")

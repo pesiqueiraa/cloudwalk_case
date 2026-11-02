@@ -86,12 +86,14 @@ def ingest(conn: psycopg.Connection, msg: NormalizedInbound,
         customer_id = customer["id"]
 
         # O DO UPDATE trava a linha da conversa até o fim da transação: duas mensagens da mesma
-        # conversa não são roteadas ao mesmo tempo
+        # conversa não são roteadas ao mesmo tempo. O WHERE repete o predicado do índice parcial
+        # conversations_one_open_per_session: conversa encerrada não conta, e a mensagem abre outra
         conversation = conn.execute(
             """
             INSERT INTO conversations (brand_id, customer_id, channel, external_session_id)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (brand_id, channel, external_session_id) DO UPDATE SET channel = EXCLUDED.channel
+            ON CONFLICT (brand_id, channel, external_session_id) WHERE status <> 'closed'
+            DO UPDATE SET channel = EXCLUDED.channel
             RETURNING id, queue_id, priority, handled_by
             """,
             (msg.brand, customer_id, msg.channel, msg.session_key),

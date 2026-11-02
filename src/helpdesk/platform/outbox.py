@@ -73,3 +73,20 @@ def mark_retry(conn: psycopg.Connection, job_id: int, error: str, max_attempts: 
         (error, max_attempts, job_id),
     ).fetchone()
     return row["status"] == "failed"
+
+
+def cancel_pending(conn: psycopg.Connection, conversation_id: UUID) -> list[Job]:
+    """Cancela os jobs que ainda não saíram: depois do handoff, nada da conversa vai ao agente.
+
+    Um job travado pelo worker no meio do envio faz esta chamada esperar; se ele sair, a resposta
+    do agente chega depois e é descartada como resposta tardia.
+    """
+    rows = conn.execute(
+        """
+        UPDATE webhook_jobs SET status = 'cancelled', last_error = 'conversa transferida para humano'
+        WHERE conversation_id = %s AND status = 'pending'
+        RETURNING id, event_id, trace_id, payload, attempts
+        """,
+        (conversation_id,),
+    ).fetchall()
+    return sorted((Job(**row) for row in rows), key=lambda job: job.id)
