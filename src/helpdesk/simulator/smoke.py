@@ -1,11 +1,13 @@
-"""Smoke test ponta a ponta: uma mensagem do chat precisa voltar respondida, com a auditoria sob um trace_id."""
+"""Smoke test ponta a ponta: uma mensagem do chat é classificada, roteada e volta respondida,
+com a auditoria sob um trace_id."""
 import time
 from datetime import datetime, timezone
 from uuid import uuid4
 
 import httpx
 
-EXPECTED_TIMELINE = ["message.received", "message.sent_to_agent", "agent.replied"]
+EXPECTED_TIMELINE = ["message.received", "message.classified", "conversation.routed",
+                     "message.sent_to_agent", "agent.replied"]
 
 
 class SmokeFailure(Exception):
@@ -19,7 +21,7 @@ def run_smoke(platform_url: str, timeout_s: float = 30) -> None:
             "message_id": f"smoke-{uuid4()}",
             "brand": "infinitepay",
             "customer": {"external_id": "smoke-001", "name": "Cliente Smoke", "email": "smoke@example.com"},
-            "text": "Minha maquininha não liga",
+            "text": "Minha maquininha não liga",  # cai na fila de Hardware, atendida pela IA
             "sent_at": datetime.now(timezone.utc).isoformat(),
         }
         response = client.post("/channels/chat/messages", json=payload)
@@ -50,3 +52,7 @@ def run_smoke(platform_url: str, timeout_s: float = 30) -> None:
             raise SmokeFailure(f"linha do tempo {types}, esperado {EXPECTED_TIMELINE}")
         if {e["trace_id"] for e in events} != {trace_id}:
             raise SmokeFailure("eventos com trace_id diferente")
+
+        routed = next(e for e in events if e["type"] == "conversation.routed")["payload"]
+        rule = routed["rule"]["name"] if routed["rule"] else "nenhuma (fila padrão)"
+        print(f"fila: {routed['queue_name']} (regra: {rule})")

@@ -1,4 +1,4 @@
-"""Clientes e frases sintéticos. Nenhum dado real."""
+"""Clientes sintéticos. Nenhum dado real. As frases vêm do banco rotulado (triage/labeled_messages.jsonl)."""
 
 CUSTOMERS = {
     "infinitepay": [
@@ -9,20 +9,5 @@ CUSTOMERS = {
     "jim": [
         {"external_id": "sim-jim-001", "name": "John Placeholder", "email": "john.placeholder@example.com", "phone": "+1555000000001"},
         {"external_id": "sim-jim-002", "name": "Mary Sample", "email": "mary.sample@example.com", "phone": "+1555000000002"},
-    ],
-}
-
-PHRASES = {
-    "infinitepay": [
-        "Minha maquininha não liga",
-        "Não recebi o pagamento de ontem",
-        "Como faço para pedir uma segunda via do cartão?",
-        "Quero falar com um atendente",
-    ],
-    "jim": [
-        "My card reader won't turn on",
-        "I didn't get yesterday's payout",
-        "How do I change my bank account?",
-        "I want to talk to a human",
     ],
 }

@@ -1,5 +1,6 @@
 """Simulador de canais. Uso:
-    python -m helpdesk.simulator.main send [--channel chat|whatsapp|email] [--brand infinitepay|jim] [--text "..."]
+    python -m helpdesk.simulator.main send [--channel chat|whatsapp|email] [--brand infinitepay|jim]
+                                           [--category payments|hardware|card|account|fraud|other] [--text "..."]
     python -m helpdesk.simulator.main smoke
 """
 import argparse
@@ -7,13 +8,16 @@ import json
 import random
 import sys
 from datetime import datetime, timezone
+from typing import get_args
 from uuid import uuid4
 
 import httpx
 
 from helpdesk.config import get_settings
-from helpdesk.simulator.data import CUSTOMERS, PHRASES
+from helpdesk.contracts import Category
+from helpdesk.simulator.data import CUSTOMERS
 from helpdesk.simulator.smoke import SmokeFailure, run_smoke
+from helpdesk.triage.dataset import load_labeled_messages
 
 
 def build_payload(channel: str, brand: str, text: str) -> dict:
@@ -33,8 +37,15 @@ def build_payload(channel: str, brand: str, text: str) -> dict:
             "text": text, "sent_at": sent_at}
 
 
-def send(platform_url: str, channel: str, brand: str, text: str | None) -> dict:
-    payload = build_payload(channel, brand, text or random.choice(PHRASES[brand]))
+def pick_text(brand: str, category: str | None = None) -> str:
+    """Sorteia uma frase do banco rotulado, da marca e, se pedida, da categoria."""
+    options = [m.text for m in load_labeled_messages()
+               if m.brand == brand and (category is None or m.category == category)]
+    return random.choice(options)
+
+
+def send(platform_url: str, channel: str, brand: str, text: str | None, category: str | None = None) -> dict:
+    payload = build_payload(channel, brand, text or pick_text(brand, category))
     response = httpx.post(f"{platform_url}/channels/{channel}/messages", json=payload, timeout=5)
     response.raise_for_status()
     return response.json()
@@ -46,14 +57,15 @@ def main() -> int:
     send_cmd = commands.add_parser("send", help="envia uma mensagem sintética")
     send_cmd.add_argument("--channel", choices=["chat", "whatsapp", "email"], default="chat")
     send_cmd.add_argument("--brand", choices=sorted(CUSTOMERS), default="infinitepay")
-    send_cmd.add_argument("--text")
+    send_cmd.add_argument("--category", choices=get_args(Category), help="sorteia uma frase desta categoria")
+    send_cmd.add_argument("--text", help="texto fixo; tem prioridade sobre --category")
     smoke_cmd = commands.add_parser("smoke", help="smoke test ponta a ponta")
     smoke_cmd.add_argument("--timeout", type=float, default=30)
     args = parser.parse_args()
 
     platform_url = get_settings().platform_url
     if args.command == "send":
-        print(json.dumps(send(platform_url, args.channel, args.brand, args.text), indent=2))
+        print(json.dumps(send(platform_url, args.channel, args.brand, args.text, args.category), indent=2))
         return 0
     try:
         run_smoke(platform_url, args.timeout)
