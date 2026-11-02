@@ -2,6 +2,8 @@
     python -m helpdesk.simulator.main send [--channel chat|whatsapp|email] [--brand infinitepay|jim]
                                            [--category payments|hardware|card|account|fraud|other] [--text "..."]
     python -m helpdesk.simulator.main smoke [--escalation]
+    python -m helpdesk.simulator.main burst --count N [--rate R] [--per-conversation K] [--duplicate] > lote.json
+    python -m helpdesk.simulator.main verify < lote.json
 """
 import argparse
 import json
@@ -16,6 +18,7 @@ import httpx
 from helpdesk.config import get_settings
 from helpdesk.contracts import Category
 from helpdesk.simulator.data import CUSTOMERS
+from helpdesk.simulator import chaos
 from helpdesk.simulator.smoke import SmokeFailure, run_escalation_smoke, run_smoke
 from helpdesk.triage.dataset import load_labeled_messages
 
@@ -63,12 +66,30 @@ def main() -> int:
     smoke_cmd.add_argument("--timeout", type=float, default=30)
     smoke_cmd.add_argument("--escalation", action="store_true",
                            help="cliente pede humano: confere o handoff e o bloqueio do agente")
+    burst_cmd = commands.add_parser("burst", help="lote de mensagens; imprime o JSON para o verify")
+    burst_cmd.add_argument("--count", type=int, required=True)
+    burst_cmd.add_argument("--rate", type=float, default=10, help="mensagens por segundo (0 = sem pausa)")
+    burst_cmd.add_argument("--per-conversation", type=int, default=1, help="mensagens por conversa")
+    burst_cmd.add_argument("--duplicate", action="store_true", help="manda cada mensagem duas vezes")
+    burst_cmd.add_argument("--brand", choices=sorted(CUSTOMERS), default="infinitepay")
+    verify_cmd = commands.add_parser("verify", help="confere o lote lido de stdin: perdidas, duplicadas, ordem")
+    verify_cmd.add_argument("--timeout", type=float, default=120)
+    verify_cmd.add_argument("--settle", type=float, default=5, help="espera extra para pegar reentregas")
     args = parser.parse_args()
 
     platform_url = get_settings().platform_url
     if args.command == "send":
         print(json.dumps(send(platform_url, args.channel, args.brand, args.text, args.category), indent=2))
         return 0
+    if args.command == "burst":
+        print(chaos.dump(chaos.burst(platform_url, args.count, args.rate, args.per_conversation,
+                                     args.duplicate, args.brand)))
+        return 0
+    if args.command == "verify":
+        report = chaos.verify(platform_url, json.load(sys.stdin), args.timeout, args.settle)
+        chaos.print_report(report)
+        print("VERIFY OK" if report.ok else "VERIFY FALHOU")
+        return 0 if report.ok else 1
     try:
         (run_escalation_smoke if args.escalation else run_smoke)(platform_url, args.timeout)
     except (SmokeFailure, httpx.HTTPError) as exc:
