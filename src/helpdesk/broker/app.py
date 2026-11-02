@@ -32,7 +32,10 @@ app = FastAPI(title="Help Desk — broker", lifespan=lifespan)
 @app.post("/webhooks/agent-requests", status_code=202)
 async def receive_agent_request(body: AgentRequest, request: Request) -> dict:
     key, value, headers = to_record(body)
-    context = {"trace_id": body.trace_id, "conversation_id": body.conversation_id}
+    context = {"trace_id": body.trace_id, "conversation_id": body.conversation_id, "event_id": body.event_id}
+    header_trace = request.headers.get("X-Trace-Id")
+    if header_trace and header_trace != str(body.trace_id):
+        log.warning("X-Trace-Id diferente do trace_id do corpo", extra={**context, "header_trace_id": header_trace})
     try:
         await request.app.state.producer.send_and_wait(
             get_settings().topic_inbound, value=value, key=key, headers=headers,

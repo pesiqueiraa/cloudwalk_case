@@ -30,3 +30,5 @@ def configure_logging(service: str) -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter(service))
     logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
+    # As linhas "HTTP Request" do httpx não têm trace_id; cada serviço registra a sua, com trace_id
+    logging.getLogger("httpx").setLevel(logging.WARNING)

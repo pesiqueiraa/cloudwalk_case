@@ -1,4 +1,5 @@
 """platform-web: canais de entrada, callback do broker e API de leitura."""
+import logging
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from uuid import UUID
@@ -17,6 +18,8 @@ from helpdesk.platform.db import apply_schema
 from helpdesk.platform.deps import get_conn
 from helpdesk.platform.ingestion import DEFAULT_CLASSIFIER, ingest, normalize_chat, normalize_email, normalize_whatsapp
 from helpdesk.triage.classifier import Classifier, get_classifier
+
+log = logging.getLogger(__name__)
 
 
 def make_pool(url: str, **kwargs) -> ConnectionPool:
@@ -57,29 +60,40 @@ Triage = Depends(get_triage)
 @app.post("/channels/chat/messages", status_code=202)
 def receive_chat(payload: ChatInbound, conn: psycopg.Connection = Conn,
                  classifier: Classifier = Triage) -> dict:
-    return asdict(ingest(conn, normalize_chat(payload), classifier))
+    return _ingested(ingest(conn, normalize_chat(payload), classifier))
 
 
 @app.post("/channels/whatsapp/messages", status_code=202)
 def receive_whatsapp(payload: WhatsAppInbound, conn: psycopg.Connection = Conn,
                  classifier: Classifier = Triage) -> dict:
-    return asdict(ingest(conn, normalize_whatsapp(payload), classifier))
+    return _ingested(ingest(conn, normalize_whatsapp(payload), classifier))
 
 
 @app.post("/channels/email/messages", status_code=202)
 def receive_email(payload: EmailInbound, conn: psycopg.Connection = Conn,
                  classifier: Classifier = Triage) -> dict:
-    return asdict(ingest(conn, normalize_email(payload), classifier))
+    return _ingested(ingest(conn, normalize_email(payload), classifier))
+
+
+def _ingested(result) -> dict:
+    log.info("mensagem duplicada" if result.duplicate else "mensagem recebida",
+             extra={"trace_id": result.trace_id, "conversation_id": result.conversation_id,
+                    "queue_id": result.queue_id})
+    return asdict(result)
 
 
 @app.post("/internal/agent-results")
 def receive_agent_result(result: AgentResult, conn: psycopg.Connection = Conn) -> dict:
+    context = {"trace_id": result.trace_id, "event_id": result.event_id, "conversation_id": result.conversation_id}
     try:
         outcome = apply_agent_result(conn, result)
     except ConversationNotFound:
+        log.warning("callback para conversa inexistente", extra=context)
         raise HTTPException(status_code=404, detail="conversa não encontrada")
     except ResultMismatch as exc:
+        log.warning("callback recusado", extra={**context, "error": str(exc)})
         raise HTTPException(status_code=422, detail=str(exc))
+    log.info("resultado do agente", extra={**context, "outcome": outcome, "event_type": result.event_type})
     # Descarte também é 200: o broker não deve tentar de novo uma resposta que chegou tarde
     return {"applied": outcome == "applied", "outcome": outcome}
 

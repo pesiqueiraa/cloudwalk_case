@@ -76,7 +76,6 @@ def connect_with_retry(url: str, connect_fn=connect, sleep=time.sleep) -> psycop
 
 def main() -> None:
     configure_logging("platform-worker")
-    logging.getLogger("httpx").setLevel(logging.WARNING)
     settings = get_settings()
     conn = connect_with_retry(settings.database_url)
     with httpx.Client() as client:
