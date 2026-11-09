@@ -18,7 +18,9 @@ Priority = Literal["high", "normal"]
 
 BRAND_LOCALE: dict[str, Locale] = {"infinitepay": "pt-BR", "jim": "en-US"}
 
-Text = Annotated[str, Field(min_length=1, max_length=4000)]
+TEXT_MAX = 4000
+EMAIL_SUBJECT_MAX = 200
+Text = Annotated[str, Field(min_length=1, max_length=TEXT_MAX)]
 
 
 class ChatCustomer(BaseModel):
@@ -51,9 +53,16 @@ class EmailInbound(BaseModel):
     from_name: str
     to_address: str
     brand: Brand
-    subject: str
+    subject: Annotated[str, Field(max_length=EMAIL_SUBJECT_MAX)]
     body_text: Text
     received_at: datetime
+
+    @model_validator(mode="after")
+    def fits_agent_text(self) -> "EmailInbound":
+        # A ingestão junta "assunto\n\ncorpo" num texto só, que o AgentRequest limita a TEXT_MAX
+        if len(self.subject) + 2 + len(self.body_text) > TEXT_MAX:
+            raise ValueError(f"assunto e corpo juntos passam de {TEXT_MAX} caracteres")
+        return self
 
 
 class AgentRequest(BaseModel):

@@ -38,3 +38,19 @@ def test_escalation_requires_reason_and_summary():
 
 def test_reply_does_not_need_summary():
     assert agent_result().summary is None
+
+
+def test_email_subject_is_limited():
+    from tests.factories import email_inbound
+
+    with pytest.raises(ValidationError):
+        email_inbound(subject="S" * 201)
+
+
+def test_email_subject_plus_body_fits_agent_text():
+    from tests.factories import email_inbound
+
+    # A plataforma junta "assunto\n\ncorpo" num texto só, que o AgentRequest limita a 4000
+    assert email_inbound(subject="S" * 100, body_text="B" * 3898)
+    with pytest.raises(ValidationError):
+        email_inbound(subject="S" * 100, body_text="B" * 3899)

@@ -69,6 +69,17 @@ def test_whatsapp_and_email_endpoints(client):
     assert wa.json()["conversation_id"] != email.json()["conversation_id"]
 
 
+def test_email_too_long_for_agent_returns_422_and_stores_nothing(client, db):
+    from tests.factories import email_inbound
+
+    body = email_inbound().model_dump(mode="json")
+    body.update(subject="S" * 200, body_text="B" * 3900)  # cada campo cabe; juntos passam de 4000
+    response = client.post("/channels/email/messages", json=body)
+
+    assert response.status_code == 422
+    assert db.execute("SELECT count(*) AS n FROM messages").fetchone()["n"] == 0
+
+
 def test_queue_conversations_ordered_by_priority_then_age(client):
     queue_id = "10000000-0000-0000-0000-000000000002"
     texts = ["Não recebi o pagamento", "Urgente: não recebi o pagamento", "O Pix não caiu"]
