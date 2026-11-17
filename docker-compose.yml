@@ -127,6 +127,19 @@ services:
       platform-web:
         condition: service_healthy
 
+  # Gerador de carga do experimento (experiment/k6). A saída vai para experiment/out, no host.
+  k6:
+    image: grafana/k6:0.54.0
+    profiles: [tools]
+    user: "0"
+    volumes:
+      - ./experiment:/experiment
+    environment:
+      PLATFORM_URL: http://platform-web:8000
+    depends_on:
+      platform-web:
+        condition: service_healthy
+
   tests:
     <<: *app
     profiles: [test]

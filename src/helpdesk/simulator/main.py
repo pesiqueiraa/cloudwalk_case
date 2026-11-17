@@ -3,7 +3,9 @@
                                            [--category payments|hardware|card|account|fraud|other] [--text "..."]
     python -m helpdesk.simulator.main smoke [--escalation]
     python -m helpdesk.simulator.main burst --count N [--rate R] [--per-conversation K] [--duplicate] > lote.json
-    python -m helpdesk.simulator.main verify < lote.json
+    python -m helpdesk.simulator.main verify [--json] < lote.json
+    python -m helpdesk.simulator.main k6-pool [--brand ...] > pool.json      frases e clientes para o k6
+    python -m helpdesk.simulator.main from-k6 [--rate R] < k6.log > lote.json  saída do k6 → lote do verify
 """
 import argparse
 import json
@@ -75,6 +77,11 @@ def main() -> int:
     verify_cmd = commands.add_parser("verify", help="confere o lote lido de stdin: perdidas, duplicadas, ordem")
     verify_cmd.add_argument("--timeout", type=float, default=120)
     verify_cmd.add_argument("--settle", type=float, default=5, help="espera extra para pegar reentregas")
+    verify_cmd.add_argument("--json", action="store_true", help="imprime o relatório em JSON (para a análise)")
+    pool_cmd = commands.add_parser("k6-pool", help="frases e clientes sintéticos para o gerador k6")
+    pool_cmd.add_argument("--brand", choices=sorted(CUSTOMERS), default="infinitepay")
+    from_k6_cmd = commands.add_parser("from-k6", help="converte a saída do k6 (stdin) no lote do verify")
+    from_k6_cmd.add_argument("--rate", type=float, help="taxa pedida ao k6, guardada no lote")
     args = parser.parse_args()
 
     platform_url = get_settings().platform_url
@@ -87,9 +94,18 @@ def main() -> int:
         return 0
     if args.command == "verify":
         report = chaos.verify(platform_url, json.load(sys.stdin), args.timeout, args.settle)
-        chaos.print_report(report)
-        print("VERIFY OK" if report.ok else "VERIFY FALHOU")
+        if args.json:
+            print(json.dumps(report.as_dict()))
+        else:
+            chaos.print_report(report)
+            print("VERIFY OK" if report.ok else "VERIFY FALHOU")
         return 0 if report.ok else 1
+    if args.command == "k6-pool":
+        print(json.dumps(chaos.k6_pool(args.brand), ensure_ascii=False))
+        return 0
+    if args.command == "from-k6":
+        print(chaos.dump(chaos.from_k6_lines(sys.stdin.readlines(), args.rate)))
+        return 0
     try:
         (run_escalation_smoke if args.escalation else run_smoke)(platform_url, args.timeout)
     except (SmokeFailure, httpx.HTTPError) as exc:

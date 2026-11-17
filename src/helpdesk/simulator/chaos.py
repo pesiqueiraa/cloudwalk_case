@@ -32,6 +32,33 @@ def agent_texts(brand: str) -> list[str]:
             if m.brand == brand and m.category in AGENT_CATEGORIES and not terms.search(m.text)]
 
 
+def k6_pool(brand: str) -> dict:
+    """Frases e clientes sintéticos que o gerador k6 sorteia; as mesmas regras do burst."""
+    return {"brand": brand, "texts": agent_texts(brand),
+            "customers": [{k: c[k] for k in ("external_id", "name", "email")} for c in CUSTOMERS[brand]]}
+
+
+def from_k6_lines(lines: list[str], rate: float | None = None) -> dict:
+    """Converte a saída do k6 (uma linha JSON por mensagem) no lote que o verify lê.
+
+    Linhas com "error" são requisições que a ingestão recusou ou não respondeu: entram em
+    ingest_errors e contam como falha no verify, porque o canal não teve confirmação.
+    """
+    sent, errors = [], []
+    for line in lines:
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        item = json.loads(line)
+        if "error" in item:
+            errors.append(item)
+        else:
+            sent.append({k: item[k] for k in ("trace_id", "conversation_id", "message_id", "seq")}
+                        | {"ingest_ms": item.get("ingest_ms")})
+    sent.sort(key=lambda s: s["seq"])
+    return {"messages": sent, "rate": rate, "ingest_errors": len(errors), "source": "k6"}
+
+
 def chat_payload(brand: str, session_id: str, text: str) -> dict:
     customer = random.choice(CUSTOMERS[brand])
     return {"session_id": session_id, "message_id": f"chaos-{uuid4()}", "brand": brand,
@@ -81,10 +108,30 @@ class Report:
     out_of_order: list[str] = field(default_factory=list)
     resent_webhooks: int = 0
     latencies_s: list[float] = field(default_factory=list)
+    ingest_errors: int = 0
+    # Janela da primeira mensagem recebida à última respondida, para a vazão ponta a ponta
+    window_s: float | None = None
 
     @property
     def ok(self) -> bool:
-        return not (self.lost or self.duplicated or self.out_of_order)
+        return not (self.lost or self.duplicated or self.out_of_order or self.ingest_errors)
+
+    @property
+    def throughput(self) -> float | None:
+        """Respostas por segundo ao longo da janela do lote."""
+        if not self.window_s:
+            return None
+        return len(self.latencies_s) / self.window_s
+
+    def as_dict(self) -> dict:
+        lat = self.latencies_s
+        return {"total": self.total, "lost": len(self.lost), "duplicated": len(self.duplicated),
+                "out_of_order": len(self.out_of_order), "resent_webhooks": self.resent_webhooks,
+                "ingest_errors": self.ingest_errors, "window_s": self.window_s,
+                "throughput": self.throughput,
+                "p50_s": percentile(lat, 50) if lat else None, "p95_s": percentile(lat, 95) if lat else None,
+                "p99_s": percentile(lat, 99) if lat else None, "max_s": max(lat) if lat else None,
+                "latencies_s": lat, "ok": self.ok}
 
 
 def percentile(values: list[float], p: float) -> float:
@@ -99,6 +146,7 @@ def percentile(values: list[float], p: float) -> float:
 def analyze(sent: list[dict], audit_by_trace: dict[str, list[dict]],
             messages_by_conversation: dict[str, list[dict]]) -> Report:
     report = Report(total=len(sent))
+    first_received, last_replied = None, None
     for item in sent:
         trace = item["trace_id"]
         events = audit_by_trace.get(trace, [])
@@ -114,8 +162,13 @@ def analyze(sent: list[dict], audit_by_trace: dict[str, list[dict]],
         received = next((e for e in events if e["type"] == "message.received"), None)
         replied = next((e for e in events if e["type"] == "agent.replied"), None)
         if received and replied:
-            delta = datetime.fromisoformat(replied["occurred_at"]) - datetime.fromisoformat(received["occurred_at"])
-            report.latencies_s.append(delta.total_seconds())
+            received_at = datetime.fromisoformat(received["occurred_at"])
+            replied_at = datetime.fromisoformat(replied["occurred_at"])
+            report.latencies_s.append((replied_at - received_at).total_seconds())
+            first_received = min(first_received or received_at, received_at)
+            last_replied = max(last_replied or replied_at, replied_at)
+    if first_received and last_replied:
+        report.window_s = (last_replied - first_received).total_seconds()
 
     # Ordem por conversa: as respostas do agente saem na mesma ordem das perguntas
     by_conversation: dict[str, list[dict]] = {}
@@ -151,11 +204,15 @@ def verify(platform_url: str, data: dict, timeout_s: float = 120, settle_s: floa
             print(f"  aguardando {len(pending)} resposta(s)", file=sys.stderr)
             time.sleep(2)
         time.sleep(settle_s)
-        return analyze(sent, *collect(client, sent))
+        report = analyze(sent, *collect(client, sent))
+    report.ingest_errors = data.get("ingest_errors", 0)
+    return report
 
 
 def print_report(report: Report) -> None:
     print(f"mensagens: {report.total}")
+    if report.ingest_errors:
+        print(f"recusadas na ingestão: {report.ingest_errors}")
     print(f"perdidas: {len(report.lost)}")
     print(f"duplicadas: {len(report.duplicated)}")
     print(f"fora de ordem (conversas): {len(report.out_of_order)}")
@@ -164,6 +221,8 @@ def print_report(report: Report) -> None:
         lat = report.latencies_s
         print(f"latência recebida → respondida: p50={percentile(lat, 50):.2f} s  p95={percentile(lat, 95):.2f} s  "
               f"p99={percentile(lat, 99):.2f} s  máx={max(lat):.2f} s")
+    if report.throughput:
+        print(f"vazão ponta a ponta: {report.throughput:.1f} respostas/s em {report.window_s:.1f} s")
     for label, items in (("perdida", report.lost), ("duplicada", report.duplicated),
                          ("fora de ordem", report.out_of_order)):
         for item in items[:5]:

@@ -1,5 +1,5 @@
 from helpdesk.agent_mock.policy import ESCALATION_TERMS
-from helpdesk.simulator.chaos import agent_texts, analyze, percentile
+from helpdesk.simulator.chaos import agent_texts, analyze, from_k6_lines, k6_pool, percentile
 
 
 def event(type_, at):
@@ -56,3 +56,42 @@ def test_burst_texts_never_escalate():
         texts = agent_texts(brand)
         assert texts
         assert not any(ESCALATION_TERMS[locale].search(t) for t in texts)
+
+
+def test_from_k6_lines_builds_batch_sorted_by_seq():
+    lines = [
+        '{"seq": 1, "trace_id": "t2", "conversation_id": "c1", "message_id": "m2", "ingest_ms": 8.5}\n',
+        'linha de log do k6 que não é json\n',
+        '{"seq": 0, "trace_id": "t1", "conversation_id": "c1", "message_id": "m1", "ingest_ms": 12.0}\n',
+    ]
+    batch = from_k6_lines(lines, rate=11)
+    assert [m["trace_id"] for m in batch["messages"]] == ["t1", "t2"]
+    assert batch["messages"][0]["ingest_ms"] == 12.0
+    assert batch["rate"] == 11 and batch["ingest_errors"] == 0
+
+
+def test_from_k6_lines_counts_rejected_ingestion():
+    lines = ['{"seq": 0, "error": 503}', '{"seq": 1, "trace_id": "t2", "conversation_id": "c1", "message_id": "m2"}']
+    batch = from_k6_lines(lines)
+    assert batch["ingest_errors"] == 1 and len(batch["messages"]) == 1
+
+
+def test_ingest_errors_fail_the_report():
+    report = analyze(sent(("t1", "c1")), {"t1": HAPPY}, {"c1": [reply("t1")]})
+    report.ingest_errors = 1
+    assert not report.ok
+
+
+def test_throughput_uses_window_from_first_received_to_last_replied():
+    late = [event("message.received", 1), event("agent.replied", 2.5)]
+    report = analyze(sent(("t1", "c1"), ("t2", "c2")), {"t1": HAPPY, "t2": late},
+                     {"c1": [reply("t1")], "c2": [reply("t2")]})
+    assert report.window_s == 2.5
+    assert report.throughput == 2 / 2.5
+    assert report.as_dict()["p50_s"] == 0.5
+
+
+def test_k6_pool_has_only_agent_texts_and_synthetic_customers():
+    pool = k6_pool("infinitepay")
+    assert pool["texts"] == agent_texts("infinitepay")
+    assert all(set(c) == {"external_id", "name", "email"} for c in pool["customers"])
