@@ -1,0 +1,11 @@
+{
+  "scenario": "pico",
+  "run": 2,
+  "rate": 11,
+  "count": 660,
+  "duration_s": 60,
+  "per_conversation": 5,
+  "started_at": "2026-11-18T01:02:01.663333+00:00",
+  "outage_target_s": 10,
+  "reset": 1
+}

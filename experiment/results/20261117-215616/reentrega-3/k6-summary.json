@@ -1,0 +1,18 @@
+{
+  "run_id": "reentrega-3-20261117-215616",
+  "rate_requested": 11,
+  "count_requested": 660,
+  "per_conversation": 5,
+  "duplicate": false,
+  "accepted": 660,
+  "rejected": 0,
+  "dropped_iterations": 0,
+  "send_window_s": 60.003788625,
+  "ingest_ms": {
+    "p50": 6.3830835,
+    "p95": 9.615345499999997,
+    "p99": 11.97570375,
+    "max": 21.364417
+  },
+  "vus_max": 22
+}

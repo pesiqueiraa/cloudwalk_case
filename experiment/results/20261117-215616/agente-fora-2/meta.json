@@ -1,0 +1,13 @@
+{
+  "scenario": "agente-fora",
+  "run": 2,
+  "rate": 11,
+  "count": 660,
+  "duration_s": 60,
+  "per_conversation": 5,
+  "started_at": "2026-11-18T01:06:07.283797+00:00",
+  "outage_target_s": 10,
+  "reset": 1,
+  "outage_start": "2026-11-18T01:06:27.553688+00:00",
+  "outage_end": "2026-11-18T01:06:38.895826+00:00"
+}

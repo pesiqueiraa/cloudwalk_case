@@ -1,0 +1,18 @@
+{
+  "run_id": "pico-1-20261117-215616",
+  "rate_requested": 11,
+  "count_requested": 660,
+  "per_conversation": 5,
+  "duplicate": false,
+  "accepted": 660,
+  "rejected": 0,
+  "dropped_iterations": 0,
+  "send_window_s": 60.001663625,
+  "ingest_ms": {
+    "p50": 5.6850205,
+    "p95": 9.846443399999997,
+    "p99": 12.10241875,
+    "max": 31.407583
+  },
+  "vus_max": 22
+}

@@ -1,0 +1,11 @@
+{
+  "scenario": "base",
+  "run": 3,
+  "rate": 2,
+  "count": 120,
+  "duration_s": 60,
+  "per_conversation": 5,
+  "started_at": "2026-11-18T00:59:19.348082+00:00",
+  "outage_target_s": 10,
+  "reset": 1
+}

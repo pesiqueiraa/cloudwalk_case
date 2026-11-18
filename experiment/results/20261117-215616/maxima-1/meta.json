@@ -1,0 +1,11 @@
+{
+  "scenario": "maxima",
+  "run": 1,
+  "rate": 22,
+  "count": 1320,
+  "duration_s": 60,
+  "per_conversation": 5,
+  "started_at": "2026-11-18T01:13:46.948594+00:00",
+  "outage_target_s": 10,
+  "reset": 1
+}

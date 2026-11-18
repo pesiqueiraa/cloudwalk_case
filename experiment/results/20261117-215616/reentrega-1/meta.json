@@ -1,0 +1,13 @@
+{
+  "scenario": "reentrega",
+  "run": 1,
+  "rate": 11,
+  "count": 660,
+  "duration_s": 60,
+  "per_conversation": 5,
+  "started_at": "2026-11-18T01:08:50.216681+00:00",
+  "outage_target_s": 10,
+  "reset": 1,
+  "rewound_agent_mock": 660,
+  "rewound_broker_outbound": 660
+}

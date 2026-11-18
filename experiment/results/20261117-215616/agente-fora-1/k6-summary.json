@@ -1,0 +1,18 @@
+{
+  "run_id": "agente-fora-1-20261117-215616",
+  "rate_requested": 11,
+  "count_requested": 660,
+  "per_conversation": 5,
+  "duplicate": false,
+  "accepted": 660,
+  "rejected": 0,
+  "dropped_iterations": 0,
+  "send_window_s": 60.003835291,
+  "ingest_ms": {
+    "p50": 5.8937295,
+    "p95": 11.19863815,
+    "p99": 17.916673219999986,
+    "max": 317.340875
+  },
+  "vus_max": 22
+}

@@ -1,0 +1,18 @@
+{
+  "run_id": "base-3-20261117-215616",
+  "rate_requested": 2,
+  "count_requested": 120,
+  "per_conversation": 5,
+  "duplicate": false,
+  "accepted": 120,
+  "rejected": 0,
+  "dropped_iterations": 0,
+  "send_window_s": 60.00305825,
+  "ingest_ms": {
+    "p50": 7.427417,
+    "p95": 10.15964825,
+    "p99": 11.119692559999999,
+    "max": 12.142917
+  },
+  "vus_max": 10
+}

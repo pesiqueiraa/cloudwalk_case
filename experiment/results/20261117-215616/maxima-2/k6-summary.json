@@ -1,0 +1,18 @@
+{
+  "run_id": "maxima-2-20261117-215616",
+  "rate_requested": 22,
+  "count_requested": 1320,
+  "per_conversation": 5,
+  "duplicate": false,
+  "accepted": 1320,
+  "rejected": 0,
+  "dropped_iterations": 0,
+  "send_window_s": 60.002459125,
+  "ingest_ms": {
+    "p50": 4.016396,
+    "p95": 8.1454333,
+    "p99": 10.19170477,
+    "max": 23.504625
+  },
+  "vus_max": 44
+}
