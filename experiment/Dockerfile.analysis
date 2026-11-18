@@ -1,0 +1,7 @@
+# Análise do experimento (pandas + Plotly; kaleido exporta os gráficos em PNG). Fora da imagem do app.
+FROM python:3.12-slim
+# libexpat1: o binário do kaleido depende dela e a imagem slim não traz
+RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir pandas==2.2.3 plotly==5.24.1 kaleido==0.2.1
+WORKDIR /app
+ENTRYPOINT ["python", "experiment/analyze.py"]

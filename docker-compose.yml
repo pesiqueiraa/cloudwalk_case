@@ -140,6 +140,16 @@ services:
       platform-web:
         condition: service_healthy
 
+  # Análise do experimento (pandas + Plotly), fora da imagem do app: tabela e gráficos em experiment/results
+  analysis:
+    build:
+      context: ./experiment
+      dockerfile: Dockerfile.analysis
+    image: helpdesk-analysis
+    profiles: [tools]
+    volumes:
+      - ./experiment:/app/experiment
+
   tests:
     <<: *app
     profiles: [test]
