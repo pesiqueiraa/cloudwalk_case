@@ -17,6 +17,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# No macOS, o repouso por inatividade congela a VM do Docker no meio da rodada (17/11: duas rodadas
+# esticaram de 60 s para 98 s e 224 s). caffeinate -i impede o repouso enquanto o script roda.
+if [[ -z ${CAFFEINATED:-} ]] && command -v caffeinate >/dev/null; then
+  CAFFEINATED=1 exec caffeinate -i "$0" "$@"
+fi
+
 RUNS=${RUNS:-3}
 DURATION=${DURATION:-60}
 OUTAGE=${OUTAGE:-10}

@@ -17,6 +17,8 @@ from datetime import datetime
 from pathlib import Path
 
 P95_LIMIT_S = 1.0
+# Folga para a janela de envio do k6: além disso, a rodada esticou (ex.: o host dormiu) e a taxa não vale
+WINDOW_SLACK = 1.1
 
 
 def percentile(values: list[float], p: float) -> float | None:
@@ -41,6 +43,8 @@ def summarize(run_dir: Path) -> dict:
         "resent_webhooks": report["resent_webhooks"], "throughput": report["throughput"],
         "e2e_p50_s": report["p50_s"], "e2e_p95_s": report["p95_s"], "e2e_p99_s": report["p99_s"],
         "e2e_max_s": report["max_s"], "verify_ok": report["ok"],
+        "send_window_s": k6["send_window_s"],
+        "window_ok": k6["send_window_s"] <= meta.get("duration_s", float("inf")) * WINDOW_SLACK,
     }
     for key in ("rewound_agent_mock", "rewound_broker_outbound"):
         if key in meta:
@@ -72,6 +76,8 @@ def line(s: dict) -> str:
             f"perdidas={s['lost']} duplicadas={s['duplicated']} fora_de_ordem={s['out_of_order']}  "
             f"e2e p50={f(s['e2e_p50_s'], '.2f')} p95={f(s['e2e_p95_s'], '.2f')} p99={f(s['e2e_p99_s'], '.2f')} s  "
             f"ingestão p95={f(s['ingest_p95_ms'], '.1f')} ms  descartadas_k6={s['dropped_iterations']}")
+    if not s["window_ok"]:
+        text += f"\n{'':<14}JANELA ESTICADA: envio levou {s['send_window_s']:.1f} s (host dormiu?); taxa inválida"
     if "outage_s" in s:
         text += (f"\n{'':<14}queda={s['outage_s']:.1f} s  na queda={s['during_outage']}  "
                  f"p95 fora da queda={f(s['outside_p95_s'], '.2f')} s  recuperação={f(s['recovery_s'], '.1f')} s  "
@@ -86,7 +92,7 @@ def main(paths: list[str]) -> int:
         summary = summarize(run_dir)
         (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
         print(line(summary))
-        ok = ok and summary["verify_ok"] and summary.get("hypothesis", True)
+        ok = ok and summary["verify_ok"] and summary["window_ok"] and summary.get("hypothesis", True)
     return 0 if ok else 1
 
 
