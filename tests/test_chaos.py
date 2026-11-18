@@ -95,3 +95,10 @@ def test_k6_pool_has_only_agent_texts_and_synthetic_customers():
     pool = k6_pool("infinitepay")
     assert pool["texts"] == agent_texts("infinitepay")
     assert all(set(c) == {"external_id", "name", "email"} for c in pool["customers"])
+
+
+def test_samples_keep_audit_times_for_window_analysis():
+    report = analyze(sent(("t1", "c1")), {"t1": HAPPY}, {"c1": [reply("t1")]})
+    [sample] = report.as_dict()["samples"]
+    assert sample["trace_id"] == "t1" and sample["latency_s"] == 0.5
+    assert sample["received_at"] == HAPPY[0]["occurred_at"]

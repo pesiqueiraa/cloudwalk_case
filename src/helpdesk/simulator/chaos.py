@@ -108,6 +108,8 @@ class Report:
     out_of_order: list[str] = field(default_factory=list)
     resent_webhooks: int = 0
     latencies_s: list[float] = field(default_factory=list)
+    # Uma linha por mensagem respondida, com os horários da auditoria: a análise separa janelas (ex.: queda)
+    samples: list[dict] = field(default_factory=list)
     ingest_errors: int = 0
     # Janela da primeira mensagem recebida à última respondida, para a vazão ponta a ponta
     window_s: float | None = None
@@ -131,7 +133,7 @@ class Report:
                 "throughput": self.throughput,
                 "p50_s": percentile(lat, 50) if lat else None, "p95_s": percentile(lat, 95) if lat else None,
                 "p99_s": percentile(lat, 99) if lat else None, "max_s": max(lat) if lat else None,
-                "latencies_s": lat, "ok": self.ok}
+                "samples": self.samples, "ok": self.ok}
 
 
 def percentile(values: list[float], p: float) -> float:
@@ -164,7 +166,11 @@ def analyze(sent: list[dict], audit_by_trace: dict[str, list[dict]],
         if received and replied:
             received_at = datetime.fromisoformat(received["occurred_at"])
             replied_at = datetime.fromisoformat(replied["occurred_at"])
-            report.latencies_s.append((replied_at - received_at).total_seconds())
+            latency = (replied_at - received_at).total_seconds()
+            report.latencies_s.append(latency)
+            report.samples.append({"trace_id": trace, "conversation_id": item["conversation_id"],
+                                   "seq": item["seq"], "received_at": received["occurred_at"],
+                                   "replied_at": replied["occurred_at"], "latency_s": latency})
             first_received = min(first_received or received_at, received_at)
             last_replied = max(last_replied or replied_at, replied_at)
     if first_received and last_replied:
