@@ -247,6 +247,7 @@ Equipes: Suporte Geral, Pagamentos, Hardware, Segurança e Fraude, com analistas
 | Partições | 3 em `helpdesk.inbound` e `helpdesk.outbound`, 1 em cada DLQ; chave = `conversation_id` | `docker-compose.yml` |
 | Entrega | At-least-once: commit do offset depois do efeito; idempotência por `event_id` | `broker/`, `agent_mock/` |
 | Limite de texto | 4.000 caracteres (e-mail: assunto até 200, assunto + corpo até 4.000) | `contracts.py` |
+| Keep-alive HTTP | 75 s no `platform-web` e no `broker` (o padrão do uvicorn é 5 s; ver [Limitações](#7-limitações)) | `docker-compose.yml` |
 | CORS | Só `http://localhost:5173` | `config.py` |
 | Atualização das telas | Consulta a cada 2 s (conversas, fila, caso) e 5 s (filas e regras) | `frontend/src` |
 
@@ -338,6 +339,7 @@ Durante a queda, as mensagens se acumulam no Kafka. A primeira espera a queda in
 - **O atraso dos consumidores (lag) não foi medido como série temporal.** A recuperação depois da queda cumpre esse papel no cenário em que importa.
 - **Uma falha de cada vez.** Não houve queda do broker, do Postgres nem do Redpanda durante a carga. Esses casos estão cobertos por testes e pelo `scripts/chaos.sh`, mas não no experimento medido.
 - **Carga só por chat, com o agente sempre respondendo.** O experimento não mistura canais nem escalações.
+- **Defeito achado depois da bateria.** No teste de reprodução em pasta limpa (24/11), 1 de 120 mensagens foi recusada a 2 msg/s, antes de chegar à plataforma. Causa: o uvicorn fechava conexões ociosas aos 5 s, e a 2 msg/s cada conexão do k6 fica ociosa ~5 s; reaproveitada no instante em que o servidor a fecha, o POST recebe EOF. O keep-alive passou para 75 s, e uma sonda por socket confirmou que conexões ociosas por 5 s ou mais deixaram de falhar. A bateria de 17/11 rodou antes da correção e não teve nenhuma recusa nas 15 rodadas, mas estava exposta à mesma corrida no cenário base.
 
 **Da triagem**
 

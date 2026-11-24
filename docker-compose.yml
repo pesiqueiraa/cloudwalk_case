@@ -57,7 +57,9 @@ services:
 
   platform-web:
     <<: *app
-    command: ["uvicorn", "helpdesk.platform.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+    # keep-alive de 75 s: com o padrão (5 s), um cliente que reaproveita a conexão ociosa perto dos 5 s
+    # recebe EOF no POST (24/11: 1 de 120 mensagens recusada no k6 a 2 msg/s, VU ociosa ~5 s)
+    command: ["uvicorn", "helpdesk.platform.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--timeout-keep-alive", "75"]
     restart: on-failure
     ports:
       - "8000:8000"
@@ -80,7 +82,7 @@ services:
 
   broker:
     <<: *app
-    command: ["uvicorn", "helpdesk.broker.app:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
+    command: ["uvicorn", "helpdesk.broker.app:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log", "--timeout-keep-alive", "75"]
     ports:
       - "8001:8001"
     restart: on-failure
