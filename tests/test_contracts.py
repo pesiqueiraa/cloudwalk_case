@@ -54,3 +54,23 @@ def test_email_subject_plus_body_fits_agent_text():
     assert email_inbound(subject="S" * 100, body_text="B" * 3898)
     with pytest.raises(ValidationError):
         email_inbound(subject="S" * 100, body_text="B" * 3899)
+
+
+# Campos opcionais de 25/11: schema_version continua 1 e payloads antigos continuam válidos
+
+def test_old_agent_request_without_history_still_validates():
+    payload = agent_request().model_dump(mode="json")
+    payload.pop("history"), payload.pop("triage")
+    req = AgentRequest.model_validate(payload)
+    assert (req.history, req.triage, req.schema_version) == ([], None, 1)
+
+
+def test_history_is_capped():
+    with pytest.raises(ValidationError):
+        agent_request(history=[{"author": "customer", "text": f"m{i}"} for i in range(11)])
+
+
+def test_agent_result_may_say_who_answered():
+    result = agent_result(agent={"impl": "llm", "model": "claude-sonnet-5-5", "effort": "low", "prompt_version": "1"})
+    assert result.agent.model == "claude-sonnet-5-5"
+    assert agent_result().agent is None

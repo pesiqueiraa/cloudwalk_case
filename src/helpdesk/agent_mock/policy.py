@@ -1,8 +1,8 @@
 """Regras fixas do agente simulado: mesma entrada, mesma saída."""
 from datetime import datetime, timezone
-from uuid import NAMESPACE_URL, uuid5
 
-from helpdesk.contracts import AgentRequest, AgentResult
+from helpdesk.agent.identity import result_event_id
+from helpdesk.contracts import AgentInfo, AgentRequest, AgentResult
 from helpdesk.text_match import compile_terms
 
 ESCALATION_TERMS = {
@@ -45,7 +45,7 @@ def decide(req: AgentRequest) -> AgentResult:
 
     return AgentResult(
         # Derivado da requisição: uma reentrega gera o mesmo event_id e a plataforma descarta a cópia
-        event_id=uuid5(NAMESPACE_URL, f"agent-mock:{req.event_id}"),
+        event_id=result_event_id(req),
         event_type="agent.escalated" if escalate else "agent.replied",
         trace_id=req.trace_id,
         conversation_id=req.conversation_id,
@@ -54,4 +54,5 @@ def decide(req: AgentRequest) -> AgentResult:
         reason=reason,
         summary=summary,
         occurred_at=datetime.now(timezone.utc),
+        agent=AgentInfo(impl="mock", prompt_version="regras-fixas"),
     )

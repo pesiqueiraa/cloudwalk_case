@@ -65,6 +65,21 @@ class EmailInbound(BaseModel):
         return self
 
 
+HISTORY_MAX = 10
+
+
+class HistoryItem(BaseModel):
+    author: Literal["customer", "agent", "analyst", "system"]
+    text: Text
+
+
+class TriageSignals(BaseModel):
+    """O que a triagem sabe da mensagem: o agente pode ajustar o tom (frustração só com o Jev)."""
+    category: Category
+    priority: Priority
+    frustration: Annotated[float, Field(ge=0, le=3)] | None = None
+
+
 class AgentRequest(BaseModel):
     schema_version: Literal[1] = 1
     event_id: UUID
@@ -78,6 +93,19 @@ class AgentRequest(BaseModel):
     customer_name: str
     text: Text
     occurred_at: datetime
+    # Opcionais (25/11; schema_version continua 1): o agente fica sem estado e a reentrega continua segura
+    history: Annotated[list[HistoryItem], Field(max_length=HISTORY_MAX)] = []   # anteriores, da mais antiga
+    triage: TriageSignals | None = None
+
+
+class AgentInfo(BaseModel):
+    """Quem respondeu, para a auditoria: o enunciado pede o LLM "registrado com modelo, versão e configurações"."""
+    impl: Literal["mock", "llm"]
+    model: str | None = None
+    effort: str | None = None
+    prompt_version: str | None = None
+    input_tokens: int | None = None    # custo medido de cada resposta do LLM
+    output_tokens: int | None = None
 
 
 class AgentResult(BaseModel):
@@ -92,6 +120,7 @@ class AgentResult(BaseModel):
     # Resumo para o analista que assume o caso; obrigatório na escalação
     summary: Annotated[str, Field(max_length=500)] | None = None
     occurred_at: datetime
+    agent: AgentInfo | None = None   # opcional (25/11)
 
     @model_validator(mode="after")
     def _escalation_has_context(self) -> "AgentResult":
