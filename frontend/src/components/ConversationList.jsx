@@ -1,4 +1,4 @@
-import { BRANDS, ago, situation } from "../format.js";
+import { BRANDS, FRUSTRATION, ago, frustrationLevel, situation } from "../format.js";
 
 export default function ConversationList({ items, selected, onSelect, empty, preview = (c) => c.last_message_text }) {
   if (!items) return <SkeletonList />;
@@ -22,6 +22,10 @@ export default function ConversationList({ items, selected, onSelect, empty, pre
                   {s?.label}
                   <span className="item-brand">{BRANDS[c.brand_id]}</span>
                   {c.priority === "high" && <span className="flag-high">Alta</span>}
+                  {frustrationLevel(c.last_customer_frustration) >= 2 && c.status !== "closed" && (
+                    <span className={`chip chip-mood-${frustrationLevel(c.last_customer_frustration)}`}>
+                      {FRUSTRATION[frustrationLevel(c.last_customer_frustration)]}</span>
+                  )}
                 </span>
               </span>
             </button>

@@ -191,3 +191,13 @@ def test_list_conversations_filters_and_orders_by_activity(client):
     assert infinitepay[0]["last_message_text"] == "Vou te transferir."
     human = client.get("/api/conversations", params={"handled_by": "human"}).json()
     assert [c["id"] for c in human] == [escalated]
+
+
+def test_list_shows_last_customer_frustration(client, db):
+    conversation_id = send(client, text="Minha maquininha não liga")["conversation_id"]
+    listed = client.get("/api/conversations").json()[0]
+    assert listed["last_customer_frustration"] is None   # regras não medem frustração
+
+    db.execute("UPDATE messages SET frustration = 2.6 WHERE conversation_id = %s AND author = 'customer'",
+               (conversation_id,))
+    assert client.get("/api/conversations").json()[0]["last_customer_frustration"] == 2.6

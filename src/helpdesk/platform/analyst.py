@@ -56,11 +56,18 @@ def list_conversations(brand: Brand | None = None, status: str | None = None, ha
     """Conversas com atividade mais recente primeiro."""
     return conn.execute(
         """
-        SELECT v.*, last.created_at AS last_message_at, last.text AS last_message_text
+        SELECT v.*, last.created_at AS last_message_at, last.text AS last_message_text,
+               mood.frustration AS last_customer_frustration
         FROM (""" + CONVERSATION_VIEW + """) v
         LEFT JOIN LATERAL (
             SELECT created_at, text FROM messages WHERE conversation_id = v.id ORDER BY created_at DESC, id DESC LIMIT 1
         ) last ON true
+        -- Como o cliente está agora (Jev): a lista destaca quem está frustrado. Nulo com as regras
+        LEFT JOIN LATERAL (
+            SELECT frustration FROM messages
+            WHERE conversation_id = v.id AND author = 'customer' AND frustration IS NOT NULL
+            ORDER BY created_at DESC, id DESC LIMIT 1
+        ) mood ON true
         WHERE (%(brand)s::text IS NULL OR v.brand_id = %(brand)s)
           AND (%(status)s::text IS NULL OR v.status = %(status)s)
           AND (%(handled_by)s::text IS NULL OR v.handled_by = %(handled_by)s)
