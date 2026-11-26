@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from helpdesk.agent_mock.main import handle_record as agent_handle
+from helpdesk.agent.main import handle_record as agent_handle
 from helpdesk.broker.dlq import dead_letter_headers, dlq_topic, header, replay_record
 from helpdesk.broker.kafka import to_record
 from helpdesk.broker.outbound import handle_record as outbound_handle
@@ -116,7 +116,7 @@ async def test_outbound_retries_until_platform_accepts_without_dlq():
     assert producer.sent == []
 
 
-# agent-mock
+# agente (mock)
 
 async def test_agent_invalid_payload_goes_to_dlq():
     producer = FakeProducer()

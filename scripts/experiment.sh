@@ -64,7 +64,7 @@ prepare() {
   fi
   # Aquecimento: confirma o caminho ponta a ponta e espera os consumidores estáveis no grupo
   sim smoke > /dev/null
-  snapshot agent-mock > /dev/null
+  snapshot agent > /dev/null
   snapshot broker-outbound > /dev/null
 }
 
@@ -100,13 +100,13 @@ run_agente-fora() {
   load "$dir" "$rate" $((rate * DURATION)) &
   local load_pid=$!
   sleep $((DURATION / 3))
-  docker compose kill -s SIGKILL agent-mock >/dev/null 2>&1
+  docker compose kill -s SIGKILL agent >/dev/null 2>&1
   meta "$dir" outage_start="$(now_utc)"
-  echo "  agent-mock derrubado (SIGKILL); volta em $OUTAGE s"
+  echo "  agente derrubado (SIGKILL); volta em $OUTAGE s"
   sleep "$OUTAGE"
-  docker compose start agent-mock >/dev/null 2>&1
+  docker compose start agent >/dev/null 2>&1
   meta "$dir" outage_end="$(now_utc)"
-  echo "  agent-mock religado"
+  echo "  agente religado"
   wait "$load_pid"
   verify "$dir" --timeout 180
 }
@@ -114,14 +114,14 @@ run_agente-fora() {
 run_reentrega() {
   local dir=$1 rate=11 count=$((11 * DURATION))
   wait_lag_zero
-  snapshot agent-mock > "$WORK/agent-mock.offsets"
+  snapshot agent > "$WORK/agent.offsets"
   snapshot broker-outbound > "$WORK/broker-outbound.offsets"
   load "$dir" "$rate" "$count"
   sim verify --settle 0 < "$dir/lote.json" > /dev/null || true   # espera as respostas
   wait_lag_zero
   echo "  parando os consumidores e voltando os offsets para antes do lote"
   rewind_consumers "$count"
-  meta "$dir" rewound_agent_mock="$(cat "$WORK/rewound-agent-mock")" \
+  meta "$dir" rewound_agent_mock="$(cat "$WORK/rewound-agent")" \
               rewound_broker_outbound="$(cat "$WORK/rewound-broker-outbound")"
   sleep 3
   wait_lag_zero

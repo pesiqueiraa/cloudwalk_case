@@ -7,6 +7,11 @@ x-app: &app
     KAFKA_BOOTSTRAP: redpanda:9092
     BROKER_URL: http://broker:8001
     PLATFORM_URL: http://platform-web:8000
+    # IA opcional, lida do .env (fora do git): sem chave, a triagem usa as regras e o agente é o mock
+    CLASSIFIER: ${CLASSIFIER:-keyword}
+    TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+    AGENT_IMPL: ${AGENT_IMPL:-mock}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
 services:
   postgres:
@@ -103,9 +108,10 @@ services:
       redpanda-init:
         condition: service_completed_successfully
 
-  agent-mock:
+  # Agente: AGENT_IMPL=mock (determinístico, usado no experimento) ou llm (Claude, com ferramentas sintéticas)
+  agent:
     <<: *app
-    command: ["python", "-m", "helpdesk.agent_mock.main"]
+    command: ["python", "-m", "helpdesk.agent.main"]
     restart: on-failure
     depends_on:
       redpanda-init:
@@ -156,6 +162,17 @@ services:
     <<: *app
     profiles: [test]
     command: ["pytest", "-q"]
+    # Os testes nunca chamam serviços externos, mesmo com as chaves no .env
+    environment:
+      DATABASE_URL: postgresql://helpdesk:helpdesk@postgres:5432/helpdesk
+      TEST_DATABASE_URL: postgresql://helpdesk:helpdesk@postgres:5432/helpdesk_test
+      KAFKA_BOOTSTRAP: redpanda:9092
+      BROKER_URL: http://broker:8001
+      PLATFORM_URL: http://platform-web:8000
+      CLASSIFIER: keyword
+      AGENT_IMPL: mock
+      TYPESAFE_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
     volumes:
       - ./src:/app/src
       - ./tests:/app/tests

@@ -1,6 +1,10 @@
 # Funções comuns ao chaos.sh e ao experiment.sh. Uso: source "$(dirname "$0")/lib.sh"
 # Espera estar em cloudwalk_case/ e ter $WORK (pasta temporária) definido.
 
+# Caos e experimento medem a plataforma: triagem por regras e agente determinístico, mesmo que o .env
+# ligue o Jev ou o LLM (o compose dá prioridade ao ambiente do shell sobre o .env)
+export CLASSIFIER=keyword AGENT_IMPL=mock
+
 sim() { docker compose run --rm -T simulator "$@" 2>>"$WORK/sim.err"; }
 sql() { docker compose exec -T postgres psql -U helpdesk -d helpdesk -tAq -c "$1"; }
 rpk() { docker compose exec -T redpanda rpk "$@"; }
@@ -12,7 +16,7 @@ lag() {
 
 wait_lag_zero() {
   for _ in $(seq 1 60); do
-    if [[ $(lag agent-mock) == 0 && $(lag broker-outbound) == 0 ]]; then return 0; fi
+    if [[ $(lag agent) == 0 && $(lag broker-outbound) == 0 ]]; then return 0; fi
     sleep 1
   done
   echo "consumidores ainda com atraso depois de 60 s" >&2
@@ -51,8 +55,8 @@ snapshot() {
 # O rpk sai com 0 mesmo quando o seek falha: confere a coluna ERROR e quantos registros voltaram.
 rewind_consumers() {
   local min_back=$1 failed="" back
-  docker compose stop agent-mock broker-outbound >/dev/null 2>&1
-  for group in agent-mock broker-outbound; do
+  docker compose stop agent broker-outbound >/dev/null 2>&1
+  for group in agent broker-outbound; do
     wait_group_empty "$group" || { failed="$failed $group"; continue; }
     docker compose exec -T redpanda sh -c "cat > /tmp/seek-$group.txt" < "$WORK/$group.offsets"
     rpk group seek "$group" --to-file "/tmp/seek-$group.txt" > "$WORK/seek-$group.out"
@@ -65,6 +69,6 @@ rewind_consumers() {
     fi
   done
   # Religa sempre, mesmo se o seek falhou: o script não pode deixar o ambiente parado
-  docker compose start agent-mock broker-outbound >/dev/null 2>&1
+  docker compose start agent broker-outbound >/dev/null 2>&1
   if [[ -n $failed ]]; then echo "seek falhou em:$failed" >&2; return 1; fi
 }

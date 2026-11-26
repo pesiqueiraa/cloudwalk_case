@@ -50,9 +50,9 @@ scenario_agente() {
   sim burst --count "$COUNT" --rate "$RATE" --per-conversation 3 > "$WORK/down.json" &
   local burst_pid=$!
   sleep 2
-  echo "parando o agent-mock"; docker compose stop agent-mock >/dev/null 2>&1
+  echo "parando o agente"; docker compose stop agent >/dev/null 2>&1
   sleep 8
-  echo "religando o agent-mock"; docker compose start agent-mock >/dev/null 2>&1
+  echo "religando o agente"; docker compose start agent >/dev/null 2>&1
   sleep 1
   echo "matando o broker-outbound (SIGKILL) e religando"
   docker compose kill -s SIGKILL broker-outbound >/dev/null 2>&1
@@ -65,7 +65,7 @@ scenario_agente() {
 scenario_reentrega() {
   say "Cenário 3: reentrega forçada (offsets voltam para antes do lote)"
   wait_lag_zero
-  snapshot agent-mock > "$WORK/agent-mock.offsets"
+  snapshot agent > "$WORK/agent.offsets"
   snapshot broker-outbound > "$WORK/broker-outbound.offsets"
   sim burst --count "$COUNT" --rate "$RATE" --per-conversation 3 > "$WORK/redeliver.json"
   sim verify --settle 0 < "$WORK/redeliver.json" > /dev/null || true
