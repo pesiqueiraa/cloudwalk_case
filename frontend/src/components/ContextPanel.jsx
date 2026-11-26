@@ -87,7 +87,8 @@ function MoodLine({ values }) {
   const w = 220, h = 44, pad = 4;
   const x = (i) => pad + (i * (w - 2 * pad)) / (values.length - 1);
   const y = (v) => h - pad - (v / 3) * (h - 2 * pad);
-  const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })},${y(v).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`).join(" ");
+  // Coordenadas do SVG com ponto decimal: nunca formatar em pt-BR aqui
+  const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   return (
     <svg className="moodline" viewBox={`0 0 ${w} ${h}`} role="img"
          aria-label={`Frustração por mensagem: ${values.map((v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })).join(", ")} (de 0 a 3)`}>

@@ -157,7 +157,7 @@ button:disabled { cursor: default; opacity: .4; }
 .item-top strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item-top time { font-size: 12px; color: var(--faint); white-space: nowrap; }
 .item-text { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.item-meta { display: flex; gap: 8px; font-size: 12px; color: var(--faint); }
+.item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--faint); }
 .item-brand { margin-left: auto; }
 .flag-high { color: var(--alert); font-weight: 600; font-size: 12px; }
 
@@ -212,7 +212,7 @@ button:disabled { cursor: default; opacity: .4; }
 
 /* Sinais do Jev: só aparecem quando chamam atenção */
 .signals { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.chip { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); }
+.chip { white-space: nowrap; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); }
 .chip-mood-0, .chip-mood-1 { background: var(--soft); color: var(--muted); }
 .chip-mood-2 { background: var(--human-soft); color: var(--human); }
 .chip-mood-3 { background: var(--alert-soft); color: var(--alert); }
