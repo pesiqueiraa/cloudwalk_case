@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from helpdesk.platform.ingestion import ingest_chat
-from tests.factories import chat_inbound
+from tests.factories import RecordingClassifier, chat_inbound
 
 
 def count(db, sql, *params):
@@ -222,3 +222,58 @@ def test_escalated_conversation_is_reused(db):
     db.execute("UPDATE conversations SET status = 'escalated', handled_by = 'human'")
     second = ingest_chat(db, chat_inbound(session_id="sess-1", message_id="m-2"))
     assert second.conversation_id == first.conversation_id
+
+
+# Triagem antes da transação (Jev): histórico, duplicata e auditoria dos sinais
+
+def test_classifier_receives_conversation_history(db):
+    from helpdesk.platform.ingestion import ingest, normalize_chat
+    triage = RecordingClassifier()
+    ingest(db, normalize_chat(chat_inbound(session_id="s-h", message_id="m-1", text="primeira")), triage)
+    ingest(db, normalize_chat(chat_inbound(session_id="s-h", message_id="m-2", text="segunda")), triage)
+    assert triage.calls[0]["history"] == []
+    assert triage.calls[1]["history"] == [{"author": "customer", "text": "primeira"}]
+
+
+def test_known_duplicate_is_not_classified_again(db):
+    from helpdesk.platform.ingestion import ingest, normalize_chat
+    triage = RecordingClassifier()
+    msg = normalize_chat(chat_inbound())
+    ingest(db, msg, triage)
+    assert ingest(db, msg, triage).duplicate is True
+    assert len(triage.calls) == 1
+
+
+def test_jev_signals_are_stored_and_audited(db):
+    from helpdesk.platform.ingestion import ingest, normalize_chat
+    result = ingest(db, normalize_chat(chat_inbound()), RecordingClassifier(frustration=2.2, wants_human=0.1))
+    message = db.execute("SELECT frustration, wants_human FROM messages").fetchone()
+    assert (round(message["frustration"], 2), round(message["wants_human"], 2)) == (2.2, 0.1)
+    payload = db.execute(
+        "SELECT payload FROM audit_events WHERE type = 'message.classified' AND trace_id = %s", (result.trace_id,)
+    ).fetchone()["payload"]
+    assert (payload["classifier"], payload["frustration"], payload["signals"]) == ("jev", 2.2, {"urgent": 0.1})
+    assert "fallback_reason" not in payload
+
+
+def test_fallback_reason_is_audited(db):
+    from helpdesk.platform.ingestion import ingest, normalize_chat
+    ingest(db, normalize_chat(chat_inbound()), RecordingClassifier(fallback_reason="TypeSafeAPITimeoutError: 1.0"))
+    payload = db.execute("SELECT payload FROM audit_events WHERE type = 'message.classified'").fetchone()["payload"]
+    assert payload["fallback_reason"] == "TypeSafeAPITimeoutError: 1.0"
+
+
+def test_rules_classification_keeps_the_old_audit_payload(db):
+    ingest_chat(db, chat_inbound(text="Minha maquininha não liga"))
+    payload = db.execute("SELECT payload FROM audit_events WHERE type = 'message.classified'").fetchone()["payload"]
+    assert set(payload) == {"category", "priority", "confidence", "classifier", "version", "matched_terms"}
+
+
+def test_webhook_payload_carries_history_and_triage_signals(db):
+    from helpdesk.platform.ingestion import ingest, normalize_chat
+    triage = RecordingClassifier(frustration=1.2)
+    ingest(db, normalize_chat(chat_inbound(session_id="s-w", message_id="m-1", text="primeira")), triage)
+    second = ingest(db, normalize_chat(chat_inbound(session_id="s-w", message_id="m-2", text="segunda")), triage)
+    payload = db.execute("SELECT payload FROM webhook_jobs WHERE trace_id = %s", (second.trace_id,)).fetchone()["payload"]
+    assert payload["history"] == [{"author": "customer", "text": "primeira"}]
+    assert payload["triage"] == {"category": "hardware", "priority": "normal", "frustration": 1.2}

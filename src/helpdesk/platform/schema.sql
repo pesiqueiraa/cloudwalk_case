@@ -131,7 +131,10 @@ CREATE TABLE IF NOT EXISTS routing_rules (
 -- Colunas novas em tabelas da semana 1: ADD COLUMN IF NOT EXISTS evita zerar o banco
 ALTER TABLE messages
     ADD COLUMN IF NOT EXISTS category text,
-    ADD COLUMN IF NOT EXISTS priority text;
+    ADD COLUMN IF NOT EXISTS priority text,
+    -- Sinais do Jev (nulos com a triagem por regras): frustração de 0 a 3 e chance de pedir uma pessoa
+    ADD COLUMN IF NOT EXISTS frustration real,
+    ADD COLUMN IF NOT EXISTS wants_human real;
 
 ALTER TABLE conversations
     ADD COLUMN IF NOT EXISTS queue_id   uuid REFERENCES queues (id),
@@ -145,6 +148,19 @@ CREATE INDEX IF NOT EXISTS conversations_queue_idx ON conversations (queue_id);
 
 ALTER TABLE queues
     ADD COLUMN IF NOT EXISTS escalation_queue_id uuid REFERENCES queues (id);  -- nulo: escala na própria fila
+
+-- Escalação proativa (25/11): frustração medida pelo Jev (0 a 3) a partir da qual a conversa vai para
+-- humano sem passar pelo agente. Nulo = desligado. Decisão da operação, editável por fila
+ALTER TABLE queues
+    ADD COLUMN IF NOT EXISTS escalate_on_frustration smallint;
+ALTER TABLE queues DROP CONSTRAINT IF EXISTS queues_escalate_on_frustration_check;
+ALTER TABLE queues ADD CONSTRAINT queues_escalate_on_frustration_check
+    CHECK (escalate_on_frustration BETWEEN 0 AND 3);
+
+-- Autor 'system': mensagem da própria plataforma ao cliente (transferência decidida pela triagem)
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_author_check;
+ALTER TABLE messages ADD CONSTRAINT messages_author_check
+    CHECK (author IN ('customer', 'agent', 'analyst', 'system'));
 
 ALTER TABLE conversations
     ADD COLUMN IF NOT EXISTS escalated_at       timestamptz,

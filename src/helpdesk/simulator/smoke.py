@@ -1,7 +1,8 @@
 """Smoke tests ponta a ponta, conferidos pela API.
 
 run_smoke: uma mensagem do chat é classificada, roteada e volta respondida, com a auditoria sob um trace_id.
-run_escalation_smoke: o cliente pede um humano, o agente escala, a conversa passa para a equipe e a
+run_escalation_smoke: o cliente pede um humano, o agente escala (ou, com o Jev, a própria triagem), a conversa
+passa para a equipe e a
 mensagem seguinte não vai mais ao agente. Um analista da equipe assume, responde e encerra; a próxima
 mensagem abre conversa nova, que mostra a anterior na memória do cliente.
 """
@@ -14,6 +15,9 @@ import httpx
 EXPECTED_TIMELINE = ["message.received", "message.classified", "conversation.routed",
                      "message.sent_to_agent", "agent.replied"]
 ESCALATION_TIMELINE = EXPECTED_TIMELINE + ["conversation.escalated"]
+# Com o Jev, o pedido de humano é reconhecido na triagem e a mensagem nem vai ao agente
+TRIAGE_ESCALATION_TIMELINE = ["message.received", "message.classified", "conversation.routed",
+                              "conversation.escalated", "message.held_for_human"]
 AFTER_HANDOFF_TIMELINE = ["message.received", "message.classified", "message.held_for_human"]
 
 
@@ -117,17 +121,19 @@ def run_escalation_smoke(platform_url: str, timeout_s: float = 30) -> None:
         conversation = view["conversation"]
         print(f"escalada em {time.monotonic() - start:.2f} s")
 
-        transfer = [m for m in view["messages"] if m["author"] == "agent"]
+        transfer = [m for m in view["messages"] if m["author"] in ("agent", "system")]
         if len(transfer) != 1:
-            raise SmokeFailure(f"esperada 1 mensagem de transferência do agente, vieram {len(transfer)}")
-        print(f"transferência: {transfer[0]['text']}")
+            raise SmokeFailure(f"esperada 1 mensagem de transferência, vieram {len(transfer)}")
+        by_triage = transfer[0]["author"] == "system"
+        print(f"transferência ({'triagem' if by_triage else 'agente'}): {transfer[0]['text']}")
         print(f"motivo: {conversation['escalation_reason']}")
         print(f"resumo: {conversation['escalation_summary']}")
         if conversation["status"] != "escalated" or not conversation["escalation_summary"]:
             raise SmokeFailure(f"conversa sem status/resumo de escalação: {conversation}")
 
         print("linha do tempo do pedido:")
-        events = check_timeline(client, first["trace_id"], ESCALATION_TIMELINE)
+        events = check_timeline(client, first["trace_id"],
+                                TRIAGE_ESCALATION_TIMELINE if by_triage else ESCALATION_TIMELINE)
         escalated = next(e for e in events if e["type"] == "conversation.escalated")["payload"]
         print(f"fila: {escalated['from_queue_id']} → {escalated['to_queue_id']}")
 

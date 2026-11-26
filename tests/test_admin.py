@@ -201,3 +201,22 @@ def test_escalation_queue_must_be_active(client):
     response = new_queue(client, escalation_queue_id=inactive["id"])
     assert response.status_code == 422
     assert "desativada" in response.json()["detail"]
+
+
+def test_queue_frustration_threshold_set_validated_and_cleared(client):
+    queue = client.get("/api/admin/queues", params={"brand": "jim"}).json()[0]
+    assert queue["escalate_on_frustration"] is None
+
+    updated = client.patch(f"/api/admin/queues/{queue['id']}", json={"escalate_on_frustration": 2}).json()
+    assert updated["escalate_on_frustration"] == 2
+    assert client.patch(f"/api/admin/queues/{queue['id']}", json={"escalate_on_frustration": 4}).status_code == 422
+    cleared = client.patch(f"/api/admin/queues/{queue['id']}", json={"escalate_on_frustration": None}).json()
+    assert cleared["escalate_on_frustration"] is None
+
+
+def test_new_queue_accepts_frustration_threshold(client):
+    body = {"name": "JIM · Irritados", "brand_id": "jim", "team_id": "pagamentos", "first_responder": "agent",
+            "escalate_on_frustration": 3}
+    created = client.post("/api/admin/queues", json=body)
+    assert created.status_code == 201, created.text
+    assert created.json()["escalate_on_frustration"] == 3

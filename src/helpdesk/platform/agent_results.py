@@ -6,12 +6,11 @@ Três desfechos possíveis:
 - discarded: a conversa já está com humano ou encerrada; a resposta é guardada e auditada, nunca entregue.
 """
 from typing import Literal
-from uuid import UUID
 
 import psycopg
 
 from helpdesk.contracts import AgentResult
-from helpdesk.platform import audit, outbox
+from helpdesk.platform import audit, handoff
 
 Outcome = Literal["applied", "duplicate", "discarded"]
 
@@ -57,8 +56,9 @@ def apply_agent_result(conn: psycopg.Connection, result: AgentResult) -> Outcome
 
         audit.record(
             conn, type="agent.replied", trace_id=result.trace_id, conversation_id=result.conversation_id,
-            actor="agent-mock",
-            payload={"event_id": str(result.event_id), "message_id": str(inserted["id"])},
+            actor="agent",
+            payload={"event_id": str(result.event_id), "message_id": str(inserted["id"]),
+                     **({"agent": result.agent.model_dump(exclude_none=True)} if result.agent else {})},
         )
         if result.event_type == "agent.escalated":
             _hand_off(conn, result, conversation)
@@ -77,46 +77,10 @@ def _check_origin(conn: psycopg.Connection, result: AgentResult) -> None:
 
 
 def _hand_off(conn: psycopg.Connection, result: AgentResult, conversation: dict) -> None:
-    """Troca o dono para humano, move para a fila de escalas (se a fila tiver uma ativa) e
-    cancela o que ainda ia para o agente."""
-    from_queue: UUID | None = conversation["queue_id"]
-    target = conn.execute(
-        """
-        SELECT e.id, e.name FROM queues q JOIN queues e ON e.id = q.escalation_queue_id AND e.active
-        WHERE q.id = %s
-        """,
-        (from_queue,),
-    ).fetchone()
-    to_queue = target["id"] if target else from_queue
-
-    conn.execute(
-        """
-        UPDATE conversations SET status = 'escalated', handled_by = 'human', queue_id = %s,
-               escalated_at = now(), escalation_reason = %s, escalation_summary = %s
-        WHERE id = %s
-        """,
-        (to_queue, result.reason, result.summary, result.conversation_id),
+    handoff.escalate(
+        conn, conversation_id=result.conversation_id, from_queue=conversation["queue_id"],
+        trace_id=result.trace_id, reason=result.reason, summary=result.summary, actor="agent",
     )
-    cancelled = outbox.cancel_pending(conn, result.conversation_id)
-    audit.record(
-        conn, type="conversation.escalated", trace_id=result.trace_id,
-        conversation_id=result.conversation_id, actor="agent-mock",
-        payload={
-            "reason": result.reason, "summary": result.summary,
-            "from_queue_id": str(from_queue) if from_queue else None,
-            "to_queue_id": str(to_queue) if to_queue else None,
-            "to_queue_name": target["name"] if target else None,
-            "cancelled_jobs": len(cancelled),
-        },
-    )
-    # Cada mensagem que não chegou ao agente fica com a equipe, sob o trace_id dela
-    for job in cancelled:
-        audit.record(
-            conn, type="message.held_for_human", trace_id=job.trace_id,
-            conversation_id=result.conversation_id, actor="platform",
-            payload={"queue_id": str(to_queue) if to_queue else None, "cause": "handoff",
-                     "job_event_id": str(job.event_id)},
-        )
 
 
 def _discard(conn: psycopg.Connection, result: AgentResult, reason: str) -> Outcome:

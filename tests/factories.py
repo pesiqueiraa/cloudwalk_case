@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from helpdesk.contracts import AgentRequest, AgentResult, ChatCustomer, ChatInbound
+from helpdesk.triage.classifier import Classification
 
 
 def now() -> datetime:
@@ -83,3 +84,19 @@ def email_inbound(**overrides):
     }
     data.update(overrides)
     return EmailInbound(**data)
+
+
+class RecordingClassifier:
+    """Classificador falso: devolve sinais fixos e guarda o histórico que recebeu."""
+
+    def __init__(self, frustration=2.2, wants_human=0.1, fallback_reason=None, category="hardware"):
+        self.calls = []
+        self.result = Classification(
+            category=category, priority="normal", confidence=0.9, classifier="jev", version="jev-1.14.0/q1",
+            matched_terms=(), frustration=frustration, wants_human=wants_human,
+            signals={"urgent": 0.1}, fallback_reason=fallback_reason,
+        )
+
+    def classify(self, text, brand, channel, history=()):
+        self.calls.append({"text": text, "history": list(history)})
+        return self.result

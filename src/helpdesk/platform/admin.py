@@ -15,8 +15,11 @@ from helpdesk.platform.deps import get_conn
 
 FirstResponder = Literal["agent", "human"]
 Name = Annotated[str, Field(min_length=1, max_length=120)]
+FrustrationLevel = Annotated[int, Field(ge=0, le=3)]
 
-QUEUE_FIELDS = ("name", "team_id", "first_responder", "is_default", "active", "escalation_queue_id")
+QUEUE_FIELDS = ("name", "team_id", "first_responder", "is_default", "active", "escalation_queue_id",
+                "escalate_on_frustration")
+NULLABLE_QUEUE_FIELDS = ("escalation_queue_id", "escalate_on_frustration")  # null nesses campos limpa
 RULE_FIELDS = ("name", "position", "brand_id", "channel", "category", "priority", "queue_id", "active")
 
 
@@ -27,6 +30,8 @@ class QueueIn(BaseModel):
     first_responder: FirstResponder
     is_default: bool = False
     escalation_queue_id: UUID | None = None   # para onde vão as escalações; nulo = a própria fila
+    # Frustração (0 a 3, medida pelo Jev) que escala sem passar pelo agente; nulo = desligado
+    escalate_on_frustration: FrustrationLevel | None = None
 
 
 class QueuePatch(BaseModel):
@@ -36,6 +41,7 @@ class QueuePatch(BaseModel):
     is_default: bool | None = None
     active: bool | None = None
     escalation_queue_id: UUID | None = None   # null limpa
+    escalate_on_frustration: FrustrationLevel | None = None   # null desliga
 
 
 class RuleIn(BaseModel):
@@ -108,11 +114,12 @@ def create_queue(body: QueueIn, conn: psycopg.Connection = Depends(get_conn)) ->
         try:
             return conn.execute(
                 """
-                INSERT INTO queues (name, brand_id, team_id, first_responder, is_default, escalation_queue_id)
-                VALUES (%s, %s, %s, %s, %s, %s) RETURNING *
+                INSERT INTO queues (name, brand_id, team_id, first_responder, is_default, escalation_queue_id,
+                                    escalate_on_frustration)
+                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *
                 """,
                 (body.name, body.brand_id, body.team_id, body.first_responder, body.is_default,
-                 body.escalation_queue_id),
+                 body.escalation_queue_id, body.escalate_on_frustration),
             ).fetchone()
         except psycopg.errors.UniqueViolation:
             raise HTTPException(status_code=409, detail="já existe uma fila com esse nome")
@@ -125,8 +132,8 @@ def update_queue(queue_id: UUID, body: QueuePatch, conn: psycopg.Connection = De
         current = conn.execute("SELECT * FROM queues WHERE id = %s FOR UPDATE", (queue_id,)).fetchone()
         if current is None:
             raise HTTPException(status_code=404, detail="fila não encontrada")
-        # Nulo em escalation_queue_id limpa o destino; nos outros campos, nulo é ignorado
-        new = {**current, **{k: v for k, v in changes.items() if v is not None or k == "escalation_queue_id"}}
+        # Nulo em escalation_queue_id e escalate_on_frustration limpa; nos outros campos, nulo é ignorado
+        new = {**current, **{k: v for k, v in changes.items() if v is not None or k in NULLABLE_QUEUE_FIELDS}}
 
         if "team_id" in changes:
             _check_team(conn, new["team_id"])
@@ -143,7 +150,7 @@ def update_queue(queue_id: UUID, body: QueuePatch, conn: psycopg.Connection = De
             return conn.execute(
                 """
                 UPDATE queues SET name = %s, team_id = %s, first_responder = %s, is_default = %s, active = %s,
-                                  escalation_queue_id = %s, updated_at = now()
+                                  escalation_queue_id = %s, escalate_on_frustration = %s, updated_at = now()
                 WHERE id = %s RETURNING *
                 """,
                 (*(new[f] for f in QUEUE_FIELDS), queue_id),

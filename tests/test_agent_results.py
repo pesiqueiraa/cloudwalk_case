@@ -213,3 +213,15 @@ def test_reply_to_human_queue_conversation_is_discarded(db):
     ingested = ingest_chat(db, chat_inbound(text="Fui vítima de golpe, clonaram meu cartão"))
     assert conversation(db, ingested.conversation_id)["handled_by"] == "human"
     assert apply_agent_result(db, result_for(ingested)) == "discarded"
+
+
+def test_agent_identity_goes_to_the_audit(db):
+    from helpdesk.platform.agent_results import apply_agent_result
+    from helpdesk.platform.ingestion import ingest_chat
+    from tests.factories import agent_result, chat_inbound
+    ingested = ingest_chat(db, chat_inbound())
+    apply_agent_result(db, agent_result(
+        trace_id=ingested.trace_id, conversation_id=ingested.conversation_id, in_reply_to=ingested.message_id,
+        agent={"impl": "llm", "model": "claude-sonnet-5-5", "effort": "low", "prompt_version": "1"}))
+    payload = db.execute("SELECT payload FROM audit_events WHERE type = 'agent.replied'").fetchone()["payload"]
+    assert payload["agent"] == {"impl": "llm", "model": "claude-sonnet-5-5", "effort": "low", "prompt_version": "1"}
