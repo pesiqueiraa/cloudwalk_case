@@ -1,8 +1,15 @@
 # Help Desk AI First — CloudWalk
 
-Plataforma de help desk própria, multi-marca (InfinitePay e JIM) e multi-equipe, em que um agente de IA **simulado** atende como primeiro nível pela mesma estrutura de hoje (webhook → broker → tópico Kafka) e analistas humanos entram por escalação. Projeto individual do Inteli, de 26/10 a 22/11/2026.
+Plataforma de help desk própria, multi-marca (InfinitePay e JIM) e multi-equipe, em que um agente de IA atende como primeiro nível pela mesma estrutura de hoje (webhook → broker → tópico Kafka) e analistas humanos entram por escalação. Projeto individual do Inteli, de 26/10 a 22/11/2026.
+
+A IA entra em dois pontos, cada um trocável por uma variável e com reserva sem chave de API:
+
+- **Triagem** (`CLASSIFIER`): regras por palavra-chave, ou o **Jev** (TypeSafe), que julga tema, frustração, pedido de humano e urgência com probabilidades calibradas. A decisão (fila, prioridade, escalar) fica em código.
+- **Agente** (`AGENT_IMPL`): um mock determinístico, usado no experimento, ou o **Claude Sonnet 5.5** com ferramentas sobre dados sintéticos, usado na demo. A plataforma não muda de um para o outro.
 
 **Resultado principal:** no pico de referência (11 msg/s), com o agente derrubado por 10 s, nenhuma das 1.980 mensagens se perdeu, duplicou ou saiu de ordem nas 3 rodadas, e o p95 das respostas às mensagens enviadas fora da queda ficou em 0,49 s. A hipótese foi confirmada nas 3 rodadas. A 22 msg/s (2× o pico) a vazão acompanhou a taxa pedida, também sem perda. Detalhes em [Resultados](#6-resultados) e as ressalvas em [Limitações](#7-limitações).
+
+**Resultado da IA:** num conjunto de 40 frases escritas às cegas (por outro modelo de IA, sem ver as regras), o Jev acertou o tema em 95%, contra 52% das regras, e reconheceu "frustrado ou mais" com precisão e recall de 94% e o pedido de humano em 100%, em 196 ms no p95. O agente com LLM custou ~US$ 0,006 por resposta e escalou sozinho a suspeita de fraude. Ver [Avaliação da IA](#avaliação-da-ia).
 
 ```bash
 docker compose up -d --build                    # sobe tudo
@@ -38,15 +45,15 @@ A CloudWalk atende milhões de microempreendedores de várias marcas por chat no
 | Filas múltiplas, configuráveis e editáveis pela operação | Filas e regras de roteamento no Postgres, editadas pela API e pela tela Configuração, valendo na mensagem seguinte sem reiniciar nada |
 | Interface de conversa cliente ↔ atendente | Tela Conversas e o simulador do cliente (gaveta disponível em qualquer tela) |
 | Painel do analista com fila de escalas, contexto e histórico | Tela Atendimento: fila de escalas, assumir, resumo, conversa, atendimentos anteriores e auditoria |
-| Integração por webhook e broker | Plataforma → webhook HTTP → broker → `helpdesk.inbound` → agente mock → `helpdesk.outbound` → broker → API da plataforma |
-| Triagem, priorização e distribuição IA/humano | Classificador por regras (categoria e prioridade), regras ordenadas, fila define quem atende primeiro |
-| Handoff com resumo e contexto | O agente escala com resumo e motivo; a conversa troca de dono e de fila; respostas tardias da IA são descartadas e auditadas |
+| Integração por webhook e broker | Plataforma → webhook HTTP → broker → `helpdesk.inbound` → agente (mock ou LLM) → `helpdesk.outbound` → broker → API da plataforma |
+| Triagem, priorização e distribuição IA/humano | Classificador por regras ou pelo Jev (tema, frustração, pedido de humano, urgência), regras de roteamento ordenadas, fila define quem atende primeiro e a partir de que frustração passa para a equipe |
+| Handoff com resumo e contexto | O agente escala com resumo e motivo, ou a própria triagem escala quando o cliente pede uma pessoa ou se irrita; a conversa troca de dono e de fila; respostas tardias da IA são descartadas e auditadas |
 | Rastreabilidade e auditoria | `trace_id` criado na ingestão e propagado por todos os serviços; eventos append-only por mensagem |
 | Memória entre interações | Conversas anteriores do mesmo cliente no contexto do caso |
 
-**Simulado de propósito:** o agente de IA (mock determinístico), os canais (o simulador faz o papel do app, do WhatsApp e do e-mail) e os clientes (dados sintéticos).
+**Simulado de propósito:** os canais (o simulador faz o papel do app, do WhatsApp e do e-mail), os clientes e os dados que as ferramentas do agente consultam (todos sintéticos). O agente de verdade da CloudWalk não é o produto: aqui ele é um mock determinístico ou um LLM, atrás do mesmo contrato.
 
-**Fora do recorte:** agente com LLM, login e permissões, SLA com cronômetro, CSAT, integrações reais com WhatsApp ou e-mail, app mobile, deploy em nuvem e banco separado por marca.
+**Fora do recorte:** login e permissões, SLA com cronômetro, CSAT, integrações reais com WhatsApp ou e-mail, app mobile, deploy em nuvem, banco separado por marca e mascaramento de dados antes dos modelos externos (os dados são sintéticos; ver [Limitações](#7-limitações)).
 
 ## 2. Arquitetura
 
@@ -55,7 +62,7 @@ flowchart LR
     SIM["Simulador de canais<br/>chat · WhatsApp · e-mail"] -->|POST /channels/...| WEB
 
     subgraph PLAT["Plataforma (FastAPI + Postgres)"]
-        WEB["platform-web<br/>ingestão · triagem · roteamento<br/>API do analista e de admin"]
+        WEB["platform-web<br/>ingestão · triagem · roteamento<br/>escalação · API do analista e de admin"]
         DB[("Postgres<br/>conversas · mensagens · filas<br/>regras · auditoria · outbox")]
         WORKER["platform-worker<br/>lê o outbox"]
         WEB --> DB
@@ -64,13 +71,17 @@ flowchart LR
 
     WORKER -->|webhook HTTP<br/>retry com backoff| BROKER["broker<br/>(HTTP → Kafka)"]
     BROKER -->|chave = conversation_id| IN[["helpdesk.inbound"]]
-    IN --> AGENT["agent-mock<br/>responde ou escala"]
+    IN --> AGENT["agent<br/>mock ou Claude (AGENT_IMPL)<br/>responde ou escala"]
     AGENT --> OUT[["helpdesk.outbound"]]
     OUT --> BOUT["broker-outbound<br/>(Kafka → HTTP)"]
     BOUT -->|POST /internal/agent-results| WEB
 
     UI["Telas em React<br/>atendimento · conversas · configuração"] -->|API JSON| WEB
+    WEB -.->|CLASSIFIER=jev<br/>até 1 s, senão regras| JEV["Jev (TypeSafe)"]
+    AGENT -.->|AGENT_IMPL=llm| CLAUDE["Claude Sonnet 5.5"]
 ```
+
+As linhas tracejadas são serviços externos, opcionais: sem chave, a triagem usa as regras e o agente é o mock.
 
 ### Serviços (`docker-compose.yml`)
 
@@ -82,7 +93,7 @@ flowchart LR
 | `platform-worker` | Envia os webhooks a partir do outbox, fora da requisição de entrada |
 | `broker` | Recebe o webhook e publica no tópico de entrada |
 | `broker-outbound` | Consome o tópico de saída e chama a API da plataforma |
-| `agent-mock` | Agente simulado: consome a entrada, responde ou escala, publica na saída |
+| `agent` | Agente: consome a entrada, responde ou escala, publica na saída. `AGENT_IMPL=mock` (determinístico) ou `llm` (Claude). Até 25/11 se chamava `agent-mock` |
 | `frontend` | Telas em React (Vite) |
 | `simulator`, `k6`, `analysis`, `tests` | Ferramentas: simulador e smoke, carga, análise e testes (só sobem quando chamadas) |
 
@@ -90,16 +101,21 @@ O broker é um serviço separado da plataforma: a plataforma nunca publica diret
 
 ### Caminho de uma mensagem
 
-1. **Ingestão** (`platform/ingestion.py`): o canal entrega a mensagem e a plataforma cria o `trace_id`. Numa transação só, grava a mensagem, classifica, roteia (na primeira mensagem da conversa) e cria o job do webhook no outbox (`webhook_jobs`). A resposta HTTP volta sem esperar o agente. A mesma mensagem reenviada pelo canal (mesmo ID no canal) não é gravada de novo.
+1. **Ingestão** (`platform/ingestion.py`): o canal entrega a mensagem e a plataforma cria o `trace_id`. **Antes** da transação, a triagem classifica a mensagem com as últimas 10 da conversa como contexto: pelas regras, ou pelo Jev com tempo máximo de 1 s e as regras de reserva. Numa transação só, grava a mensagem e a classificação, roteia (na primeira mensagem da conversa) e cria o job do webhook no outbox (`webhook_jobs`), ou escala ali mesmo (ver [Handoff](#handoff)). A resposta HTTP volta sem esperar o agente. A mesma mensagem reenviada pelo canal (mesmo ID no canal) não é gravada nem classificada de novo.
 2. **Webhook** (`platform/worker.py`): o worker pega o job pendente mais antigo de cada conversa (`FOR UPDATE SKIP LOCKED`) e faz o POST para o broker. Se falhar, tenta de novo com backoff exponencial (2, 4, 8… até 60 s, 10 tentativas, ~5 min). Depois disso, o job fica `failed` (a DLQ da plataforma) e a auditoria registra `message.delivery_failed`.
 3. **Broker → Kafka** (`broker/app.py`): publica em `helpdesk.inbound` com chave = `conversation_id`, o que garante a ordem por conversa, com produtor idempotente e `acks=all`.
-4. **Agente** (`agent_mock/`): consome, decide, publica em `helpdesk.outbound` e só então faz o commit do offset (at-least-once). O `event_id` da resposta é derivado do `event_id` da requisição, então uma reentrega gera a mesma resposta e a plataforma descarta a cópia.
+4. **Agente** (`agent/`, com a decisão em `agent_mock/` ou `agent_llm/`): recebe a mensagem com o histórico e os sinais da triagem, decide, publica em `helpdesk.outbound` e só então faz o commit do offset (at-least-once). O `event_id` da resposta é derivado do `event_id` da requisição, então uma reentrega gera a mesma resposta e a plataforma descarta a cópia.
 5. **Volta** (`broker/outbound.py`): chama `POST /internal/agent-results`. Em 408, 429, 5xx ou falha de rede, tenta de novo sem avançar o offset. Nos outros 4xx, ou com payload inválido, manda para `helpdesk.outbound.dlq` e segue.
 6. **Resposta ou escalação** (`platform/agent_results.py`): grava a resposta na conversa ou faz o handoff. Se a conversa já está com humano, a resposta vai para `discarded_agent_results` e a auditoria registra `agent.reply_discarded`.
 
 ### Handoff
 
-Quando o agente escala, a plataforma trava a conversa e, numa transação:
+A conversa passa para a equipe por dois caminhos:
+
+- **o agente escala** (o cliente pediu uma pessoa, suspeita de fraude, ou o agente não resolveu; com o LLM, também quando a API falha);
+- **a triagem escala** (só com o Jev): o cliente pediu uma pessoa (probabilidade acima de 0,7), ou a frustração chegou ao limiar configurado na fila. A mensagem nem vai ao agente, e a plataforma avisa o cliente (autor `system`).
+
+Nos dois casos, o mesmo código (`platform/handoff.py`) trava a conversa e, numa transação:
 
 - grava a mensagem de transferência;
 - passa a conversa para `handled_by = human`, com resumo e motivo;
@@ -112,8 +128,8 @@ Daí em diante, nada daquela conversa vai ao agente (`message.held_for_human`), 
 
 Todo efeito relevante grava um evento append-only em `audit_events`, com `trace_id`, ator e payload. Os principais:
 
-- `message.received`, `message.classified`, `conversation.routed` (com um retrato da regra e da fila usadas)
-- `message.sent_to_agent`, `agent.replied`, `conversation.escalated`
+- `message.received`, `message.classified` (com o classificador, a versão e, com o Jev, as probabilidades e o motivo de uma eventual reserva), `conversation.routed` (com um retrato da regra e da fila usadas)
+- `message.sent_to_agent`, `agent.replied` (com o modelo, o esforço, a versão do prompt e os tokens do LLM), `conversation.escalated` (com o ator: `agent` ou `triage`)
 - `message.held_for_human`, `agent.reply_discarded`, `message.delivery_failed`
 - `conversation.assigned`, `analyst.replied`, `conversation.closed`
 
@@ -167,6 +183,20 @@ curl -s -X POST localhost:8000/api/admin/dead-letters/<id>/retry
 docker compose run --rm --no-deps --entrypoint python simulator -m helpdesk.broker.dlq list --topic helpdesk.outbound.dlq
 ```
 
+### Ligar a IA (opcional)
+
+Sem chaves, tudo funciona com as regras e o mock. Para a triagem pelo Jev e o agente com o Claude:
+
+```bash
+cp .env.example .env        # o .env fica fora do git e da imagem
+# preencha TYPESAFE_API_KEY e ANTHROPIC_API_KEY, e troque CLASSIFIER=jev e AGENT_IMPL=llm
+docker compose up -d --build
+docker compose run --rm simulator smoke --escalation          # com o Jev, quem transfere é a triagem
+docker compose run --rm -T simulator evaluate-classifier       # regras × Jev nos três conjuntos rotulados (~US$ 0,01)
+```
+
+Troque o modo pelo `.env`, não por variável exportada no shell: um `docker compose run` sem a variável recria a plataforma no modo padrão. Cada resposta do agente com LLM custa ~US$ 0,006, e cada mensagem triada pelo Jev ~US$ 0,00003. Os testes nunca chamam serviços externos, mesmo com as chaves no `.env`.
+
 ### Falhas e experimento
 
 ```bash
@@ -176,7 +206,7 @@ RUNS=1 scripts/experiment.sh base             # uma rodada só, para conferir o 
 docker compose run --rm analysis experiment/results/<data>   # tabela (cenarios.md, rodadas.csv) e gráficos (PNG)
 ```
 
-O `experiment.sh` faz `docker compose down -v` antes de cada rodada, o que **apaga os dados locais do compose** (todos sintéticos). No macOS, ele se relança sob `caffeinate -i` para a máquina não dormir no meio da rodada.
+O caos e o experimento sempre rodam com as regras e o mock (`scripts/lib.sh`), qualquer que seja o `.env`: medem a plataforma, não os modelos. O `experiment.sh` faz `docker compose down -v` antes de cada rodada, o que **apaga os dados locais do compose** (todos sintéticos). No macOS, ele se relança sob `caffeinate -i` para a máquina não dormir no meio da rodada.
 
 ### Zerar o ambiente
 
@@ -202,22 +232,58 @@ docker compose down -v && docker compose up -d --build
 | Análise | pandas 2.2.3 + Plotly 5.24.1, em contêiner próprio | A imagem do app não carrega dependências de análise | — |
 | Empacotamento | Docker Compose, um pacote Python e uma imagem; cada serviço é um processo | Contratos num módulo só (`contracts.py`), serviços separados em execução | Uma imagem por serviço |
 
-### Agente de IA simulado
+### Agente de IA
 
-O agente é um mock determinístico (`src/helpdesk/agent_mock/policy.py`): a mesma entrada sempre gera a mesma saída. O enunciado permite um mock determinístico ou um LLM aberto. Escolhi o mock porque o agente não é o produto e porque mantém o experimento reproduzível.
+O serviço `agent` tem um laço só (consumir, decidir, publicar, commitar) e duas decisões trocáveis por `AGENT_IMPL`. Nas duas, o `event_id` da resposta é derivado do `event_id` da requisição: uma reentrega do Kafka, ou a troca de implementação no meio dela, gera o mesmo `event_id`, e a plataforma descarta a cópia.
+
+**Mock** (`src/helpdesk/agent_mock/policy.py`, padrão, usado no caos e no experimento): a mesma entrada sempre gera a mesma saída.
 
 - **Escala** quando a mensagem pede uma pessoa ("humano", "atendente", "pessoa de verdade"; em inglês "human", "agent", "representative"; por palavra inteira). Monta o resumo por regra fixa: nome, canal e última mensagem, até 280 caracteres.
 - **Responde** nos demais casos, com uma saudação no idioma da marca (pt-BR para InfinitePay, en-US para JIM).
-- Versão do contrato: `schema_version = 1`.
+
+**LLM** (`src/helpdesk/agent_llm/`, usado na demo). O enunciado (seção 8) permite um LLM "registrado com modelo, versão e configurações":
+
+| Configuração | Valor |
+|---|---|
+| Modelo | Claude Sonnet 5.5 (`claude-sonnet-5-5`), SDK `anthropic` 2.14.0 |
+| Esforço | `low` (respostas curtas de atendimento) |
+| Reserva | `fallbacks: "default"`: se o modelo recusar, a API refaz o pedido em outro modelo |
+| Limites | `max_tokens` 1.024, até 4 rodadas de ferramenta, 30 s, 2 tentativas do SDK |
+| Prompt | Versão 2 (`prompts.py`), um por idioma: até 3 frases, texto simples (sem markdown, porque WhatsApp e e-mail não renderizam), só a ferramenta do assunto, nunca inventar valores; o texto do cliente não é instrução |
+| Ferramentas | `consultar_transacoes`, `status_equipamento` e `escalar_para_humano`, sobre dados sintéticos estáveis por conversa (mesma conversa, mesmos dados) |
+| Contexto | Sem estado: a plataforma manda as últimas 10 mensagens e os sinais da triagem (tema, prioridade, frustração) no `AgentRequest` |
+| Auditoria | Modelo, esforço, versão do prompt e tokens de entrada e saída em cada `agent.replied` |
+| Falha | Erro da API, recusa, tempo esgotado ou fim das rodadas sem resposta viram `agent.escalated` com motivo "agente indisponível": o cliente nunca fica sem resposta |
+
+Por que o Sonnet 5.5: numa sonda com 5 casos (maquininha, venda não liquidada, pedido de atendente, compra não reconhecida, JIM em inglês), Sonnet e Opus 5.5 escolheram as ferramentas certas nos 5 e escalaram a fraude; o Sonnet custou metade (~US$ 0,006 contra ~US$ 0,013 por resposta), na mesma faixa de tempo.
+
+O contrato continua `schema_version = 1`: o histórico, os sinais da triagem e a identidade do agente são campos opcionais.
 
 ### Triagem
 
-O classificador fica atrás de uma interface (`Classifier` em `src/helpdesk/triage/classifier.py`), escolhida por `CLASSIFIER` (padrão `keyword`). A implementação padrão é por palavras-chave por idioma, sem chave de API.
+O classificador fica atrás de uma interface (`Classifier` em `src/helpdesk/triage/classifier.py`), escolhida por `CLASSIFIER`. A decisão fica em código (`triage/decision.py`); o modelo só dá os julgamentos.
+
+**Regras** (`keyword`, padrão, sem chave): palavras-chave por idioma.
 
 - **Categorias** (fixas em código, porque são saída do classificador e não configuração da operação): `payments`, `hardware`, `card`, `account`, `fraud` e `other`.
 - **Prioridade:** `high` para fraude ou termos de urgência ("urgente", "bloqueado", "urgent", "locked"…); `normal` nos demais casos.
-- A triagem roda dentro da transação da ingestão, porque o classificador por regras custa microssegundos.
-- Banco rotulado: 73 frases sintéticas (`labeled_messages.jsonl`), usadas pelo simulador e pelo teste de acurácia. Ver a ressalva em [Limitações](#7-limitações).
+- Não medem frustração nem pedido de humano: com as regras, quem escala é o agente.
+
+**Jev** (`jev`, TypeSafe, `typesafe-sdk` 0.7.6, modelo fixado em `jev-1.14.0`, `triage/jev.py`). Cinco perguntas numa chamada, sobre a mensagem e as 10 anteriores da conversa (`triage/jev_questions.py`, versão 1):
+
+| Pergunta | Tipo | Como vira decisão |
+|---|---|---|
+| Qual o tema? | Choice (5 temas) | A categoria, se a pergunta seguinte disser que há tema |
+| A mensagem trata de um produto? | Noul (sim/não) | Abaixo de 0,5 → `other` (saudação, agradecimento, pergunta geral) |
+| Quão frustrado está o cliente? | Score (0 a 3) | Nível = valor esperado arredondado (1,6 conta como 2): calmo, incomodado, frustrado, muito irritado |
+| Pede uma pessoa? | Noul | Acima de 0,7 → escala na triagem |
+| Bloqueia o negócio ou é para hoje? | Noul | Acima de 0,7 → prioridade `high` (fraude também) |
+
+- **Antes da transação, com 1 s no máximo:** a classificação, a rota e o outbox continuam atômicos, sem segurar a trava da conversa durante a chamada externa. Erro, tempo esgotado ou falta de chave caem nas regras, e o motivo vai para a auditoria (`fallback_reason`).
+- **Auditoria:** a versão (`jev-1.14.0/q1`) e as probabilidades de cada pergunta em `message.classified`; a frustração e o pedido de humano também ficam na mensagem, para as telas.
+- **Escalação proativa:** cada fila tem um limiar opcional, `escalate_on_frustration` (0 a 3; nulo = desligado), editável pela API e pela tela. É decisão da operação, não do código: falso positivo gasta tempo de analista, falso negativo deixa um cliente irritado com o robô.
+
+Banco rotulado: 73 frases sintéticas (`labeled_messages.jsonl`), usadas pelo simulador e pela avaliação, mais dois conjuntos para medir a generalização (`hard_messages.jsonl`, 48 frases sem as palavras-chave; `blind_messages.jsonl`, 40 frases escritas às cegas). Ver [Avaliação da IA](#avaliação-da-ia).
 
 ### Filas e roteamento
 
@@ -245,7 +311,10 @@ Equipes: Suporte Geral, Pagamentos, Hardware, Segurança e Fraude, com analistas
 | Intervalo de consulta do worker | 0,5 s (`WORKER_POLL_SECONDS`) | `src/helpdesk/config.py` |
 | Tentativas do webhook | 10, backoff 2, 4, 8, 16, 32 e 60 s (~5 min) | `config.py`, `platform/outbox.py` |
 | Partições | 3 em `helpdesk.inbound` e `helpdesk.outbound`, 1 em cada DLQ; chave = `conversation_id` | `docker-compose.yml` |
-| Entrega | At-least-once: commit do offset depois do efeito; idempotência por `event_id` | `broker/`, `agent_mock/` |
+| Entrega | At-least-once: commit do offset depois do efeito; idempotência por `event_id` | `broker/`, `agent/` |
+| Triagem | `CLASSIFIER=keyword\|jev`; Jev `jev-1.14.0`, 1 s no máximo, sem novas tentativas | `config.py`, `triage/` |
+| Agente | `AGENT_IMPL=mock\|llm`; `claude-sonnet-5-5`, esforço `low`, 30 s | `config.py`, `agent_llm/` |
+| Limiares da triagem | Noul sim > 0,7, não < 0,3; tema > 0,5; frustração por fila (0 a 3) | `triage/decision.py`, tabela `queues` |
 | Limite de texto | 4.000 caracteres (e-mail: assunto até 200, assunto + corpo até 4.000) | `contracts.py` |
 | Keep-alive HTTP | 75 s no `platform-web` e no `broker` (o padrão do uvicorn é 5 s; ver [Limitações](#7-limitações)) | `docker-compose.yml` |
 | CORS | Só `http://localhost:5173` | `config.py` |
@@ -281,7 +350,7 @@ Cada cenário tem 60 s de carga e 3 rodadas, e cada rodada começa com o ambient
 |---|---|---|
 | Base | 2 msg/s | — |
 | Pico | 11 msg/s | — |
-| Pico, agente fora | 11 msg/s | `SIGKILL` no `agent-mock` aos 20 s; religado 10 s depois. A janela da queda é a medida (kill → start), não a pedida |
+| Pico, agente fora | 11 msg/s | `SIGKILL` no agente (então `agent-mock`) aos 20 s; religado 10 s depois. A janela da queda é a medida (kill → start), não a pedida |
 | Reentrega forçada | 11 msg/s | `rpk group seek` do grupo do agente para antes do lote: o Kafka entrega tudo de novo |
 | Máxima | 22 msg/s | — |
 
@@ -293,7 +362,7 @@ Cada cenário tem 60 s de carga e 3 rodadas, e cada rodada começa com o ambient
 - **Vazão** = respostas por segundo na janela da rodada.
 - **Validade da rodada:** o `run_summary.py` reprova a rodada cuja janela de envio passa 10% da duração pedida. Na primeira bateria (17/11, 21:28) o Mac dormiu duas vezes; as rodadas esticaram para 98 s e 224 s, sem perda nem duplicata, mas com a taxa inválida. A bateria inteira foi refeita sob `caffeinate`.
 
-**Ambiente:** um MacBook (Apple Silicon) com Docker Desktop. Todos os serviços, o gerador de carga e o banco na mesma máquina.
+**Ambiente:** um MacBook (Apple Silicon) com Docker Desktop. Todos os serviços, o gerador de carga e o banco na mesma máquina. O experimento roda com as regras e o mock: mede a plataforma, não os modelos (10 mil respostas do LLM custariam ~US$ 65 e mediriam a API da Anthropic).
 
 ## 6. Resultados
 
@@ -327,6 +396,29 @@ Durante a queda, as mensagens se acumulam no Kafka. A primeira espera a queda in
 - **Escalabilidade:** a vazão acompanhou a taxa pedida até 22 msg/s, 2× o pico de referência, e a ingestão síncrona ficou abaixo de 15 ms no p95.
 - **Latência:** o p95 de ~0,49 s é igual em todas as taxas porque reflete o intervalo de consulta do worker (0,5 s), e não um gargalo. Ver [Limitações](#7-limitações).
 
+**Re-checagem depois da IA (26/11, `experiment/results/20261126-121348/`):** com a triagem antes da transação e os contratos novos, uma rodada do base e uma do agente fora repetiram a bateria dentro da variação. Base: 120/120, p95 0,50 s. Agente fora: 660/660, 0 perdidas, 0 duplicadas, 0 fora de ordem, p95 fora da queda 0,49 s, recuperação 0,4 s, hipótese confirmada. A ingestão p95 do cenário base subiu de 11,0 para 13,9 ms, provavelmente pela leitura do histórico da conversa antes da transação. Os três cenários do `scripts/chaos.sh` também passaram.
+
+### Avaliação da IA
+
+**Triagem** (`simulator evaluate-classifier`, 25/11, `experiment/results/ia-20261125/triagem.md`):
+
+| Conjunto | Frases | Regras | Jev |
+|---|---|---|---|
+| Banco do projeto (as regras foram escritas para ele) | 73 | 100% | 99% |
+| Frases difíceis, sem as palavras-chave | 48 | 35% | 100% |
+| Escritas às cegas por outro modelo de IA, sem ver as regras nem as perguntas | 40 | 52% | 95% |
+
+| Sentimento (Jev) | Frases | Nível exato | ±1 nível | "Frustrado ou mais": precisão | recall | Pedido de humano |
+|---|---|---|---|---|---|---|
+| Frases difíceis | 48 | 71% | 96% | 94% | 85% | 100% |
+| Às cegas | 40 | 90% | 95% | 94% | 94% | 100% |
+
+Latência do Jev: p50 172 ms, p95 196 ms, nenhuma queda para as regras. Custo: ~US$ 0,00003 por mensagem (~US$ 3,50 por dia no volume de referência de 100 mil mensagens).
+
+**Agente com LLM** (25 e 26/11, chamadas reais): com o prompt v2, os 5 casos da sonda e uma pergunta de venda usaram só a ferramenta do assunto, em 1,6 a 3,1 s por resposta; a compra não reconhecida e o pedido de atendente foram escalados pelo próprio agente. Custo medido na auditoria: ~US$ 0,006 por resposta (1.100 a 2.400 tokens de entrada).
+
+**Escalação proativa ao vivo:** numa conversa de três mensagens, a frustração medida subiu de 0,98 para 1,82 e 2,98; na segunda, chegou ao limiar "frustrado" da fila, e a triagem transferiu antes de a mensagem ir ao agente. A terceira ficou com a equipe.
+
 ## 7. Limitações
 
 **Do experimento**
@@ -339,11 +431,18 @@ Durante a queda, as mensagens se acumulam no Kafka. A primeira espera a queda in
 - **O atraso dos consumidores (lag) não foi medido como série temporal.** A recuperação depois da queda cumpre esse papel no cenário em que importa.
 - **Uma falha de cada vez.** Não houve queda do broker, do Postgres nem do Redpanda durante a carga. Esses casos estão cobertos por testes e pelo `scripts/chaos.sh`, mas não no experimento medido.
 - **Carga só por chat, com o agente sempre respondendo.** O experimento não mistura canais nem escalações.
+- **Carga sem os modelos.** O experimento roda com as regras e o mock. Com o Jev, cada ingestão ganharia ~200 ms (até 1 s) e dependeria do limite de requisições da TypeSafe; com o LLM, cada resposta leva de 2 a 5 s. Nenhum dos dois foi medido sob carga.
 - **Defeito achado depois da bateria.** No teste de reprodução em pasta limpa (24/11), 1 de 120 mensagens foi recusada a 2 msg/s, antes de chegar à plataforma. Causa: o uvicorn fechava conexões ociosas aos 5 s, e a 2 msg/s cada conexão do k6 fica ociosa ~5 s; reaproveitada no instante em que o servidor a fecha, o POST recebe EOF. O keep-alive passou para 75 s, e uma sonda por socket confirmou que conexões ociosas por 5 s ou mais deixaram de falhar. A bateria de 17/11 rodou antes da correção e não teve nenhuma recusa nas 15 rodadas, mas estava exposta à mesma corrida no cenário base.
 
-**Da triagem**
+**Da IA**
 
-- **A acurácia do classificador é otimista.** O classificador por palavras-chave acerta 73/73 do banco rotulado, mas as frases e os termos foram escritos juntos. Não há conjunto de validação independente, então o número não estima o acerto em mensagens reais.
+- **As regras só acertam o que conhecem.** 100% no banco para o qual foram escritas, 35% e 52% nos outros conjuntos.
+- **Os rótulos são de uma pessoa só.** Os rótulos de tema e frustração das frases difíceis são do autor, que também escreveu as perguntas do Jev. O conjunto às cegas reduz, mas não elimina, esse viés: foi escrito por outro modelo de IA, sem ver as regras nem as perguntas, mas também é sintético, e nenhuma frase é de um cliente real.
+- **Frustração é subjetiva.** O nível exato bateu em 71% a 90%; com tolerância de um nível, em 95% a 96%. Por isso a decisão usa um limiar ("frustrado ou mais") e não o nível exato.
+- **Dependência externa.** Jev e Claude são serviços de terceiros, com chave, rede e limite de requisições. A reserva (regras e "agente indisponível" → humano) mantém o atendimento, mas uma queda do provedor do LLM manda a carga para os analistas.
+- **O texto do LLM não é determinístico.** O limite de 3 frases é instrução, não garantia. Numa reentrega, o LLM pode gerar outro texto: a plataforma guarda a primeira resposta e descarta a cópia, que ainda assim foi paga.
+- **Dados vão a serviços externos sem mascaramento.** Aceitável porque tudo é sintético; em produção, CPF, cartão e telefone teriam de ser mascarados antes (ver [Evolução](#8-possibilidades-de-evolução)).
+- **Ferramentas sintéticas.** As transações e o status do equipamento são gerados por conversa; não há sistema real por trás.
 - As categorias são fixas em código, e a prioridade tem só dois níveis (`high` e `normal`).
 
 **Da plataforma**
@@ -360,14 +459,17 @@ Durante a queda, as mensagens se acumulam no Kafka. A primeira espera a queda in
 
 ## 8. Possibilidades de evolução
 
-- **Classificador com LLM** (por exemplo, o Jev) na mesma interface `Classifier`: assíncrono, com timeout, limiar de confiança, versão fixada e as regras como fallback. Nesse caso, a classificação sai da transação da ingestão e vai para o worker.
+- **Mascarar dados antes dos modelos externos** (CPF, cartão, telefone), obrigatório com dados reais.
+- **Triagem assíncrona no worker:** tira a chamada ao Jev da requisição de entrada, ao custo de a conversa ficar sem fila por um instante.
+- **Medir os modelos sob carga:** Jev a 11 e 22 msg/s, e o LLM com um orçamento definido; testar o Haiku 5.5 como agente mais barato.
+- **Avaliação com rótulos de várias pessoas** e, com autorização, mensagens reais anonimizadas.
 - **Latência menor no webhook:** `LISTEN/NOTIFY` do Postgres ou intervalo de consulta menor, e envio paralelo entre conversas, mantendo um job por conversa por vez.
 - **Encontrar o limite:** rodadas acima de 22 msg/s até a saturação, com o lag dos consumidores como série, e em mais de uma máquina.
 - **Identidade única do cliente** entre canais, para a memória cruzar chat, WhatsApp e e-mail.
 - **Telas em tempo real** (SSE ou WebSocket) em vez de consulta a cada 2 s.
 - **Login e permissões por equipe e marca**, SLA com cronômetro e CSAT, que ficaram fora do recorte.
 - **Operação:** métricas (Prometheus), saída limpa do grupo do Kafka no `SIGTERM` e deploy self-hosted (por exemplo, com Kamal).
-- **Agente real:** trocar o mock pelo agente da CloudWalk exige só respeitar os contratos de `src/helpdesk/contracts.py` (requisição em `helpdesk.inbound`, resultado em `helpdesk.outbound`).
+- **Agente real:** trocar o mock ou o LLM pelo agente da CloudWalk exige só respeitar os contratos de `src/helpdesk/contracts.py` (requisição em `helpdesk.inbound`, resultado em `helpdesk.outbound`).
 
 ## 9. Premissas
 
