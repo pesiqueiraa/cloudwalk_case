@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { CATEGORIES, time } from "../format.js";
+import { CATEGORIES, FRUSTRATION, WANTS_HUMAN_MIN, frustrationLevel, time } from "../format.js";
 
 // A conversa conta a própria história: mensagens e, entre elas, o que a plataforma fez.
 // O trilho à esquerda mostra quem estava atendendo em cada momento: IA, equipe ou encerrada.
@@ -12,7 +12,8 @@ function eventLine(e) {
           + (p.rule ? `, pela regra “${p.rule.name}”` : ", a fila padrão da marca")
           + (p.first_responder === "human" ? ". Quem atende é a equipe." : ".") };
     case "conversation.escalated":
-      return { tone: "handoff", phase: "human", text: "Transferida para a equipe",
+      return { tone: "handoff", phase: "human",
+        text: e.actor === "triage" ? "A triagem transferiu para a equipe" : "Transferida para a equipe",
         detail: [p.reason, p.to_queue_name ? `Fila ${p.to_queue_name}.` : null].filter(Boolean).join(". ") };
     case "conversation.assigned":
       return { tone: "human", text: `${p.analyst_name} assumiu o caso` };
@@ -49,7 +50,7 @@ export default function Thread({ messages, audit, customerName, analystName }) {
 
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [items.length]);
 
-  const who = { customer: customerName ?? "Cliente", agent: "IA", analyst: analystName ?? "Equipe" };
+  const who = { customer: customerName ?? "Cliente", agent: "IA", analyst: analystName ?? "Equipe", system: "Plataforma" };
   if (!items.length) return <p className="empty thread-empty">Nenhuma mensagem ainda.</p>;
   return (
     <ol className="thread">
@@ -61,6 +62,7 @@ export default function Thread({ messages, audit, customerName, analystName }) {
               {who[item.m.author]}, <time>{time(item.m.created_at)}</time>
               {item.m.category && <span className="bubble-cat">{CATEGORIES[item.m.category]}</span>}
             </span>
+            <Signals m={item.m} />
           </div>
         </li>
       ) : (
@@ -72,5 +74,21 @@ export default function Thread({ messages, audit, customerName, analystName }) {
       ))}
       <li ref={end} aria-hidden="true" className="thread-end" />
     </ol>
+  );
+}
+
+// O que o Jev percebeu na mensagem do cliente: só aparece quando chama atenção
+function Signals({ m }) {
+  if (m.author !== "customer") return null;
+  const level = frustrationLevel(m.frustration);
+  const asks = m.wants_human != null && m.wants_human > WANTS_HUMAN_MIN;
+  if (!(level >= 2) && !asks) return null;
+  return (
+    <span className="signals">
+      {level >= 2 && <span className={`chip chip-mood-${level}`} title={`Frustração ${m.frustration.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} de 3 (Jev)`}>
+        {FRUSTRATION[level]}</span>}
+      {asks && <span className="chip chip-human" title={`Pedido de pessoa: ${Math.round(m.wants_human * 100)}% (Jev)`}>
+        Pediu uma pessoa</span>}
+    </span>
   );
 }

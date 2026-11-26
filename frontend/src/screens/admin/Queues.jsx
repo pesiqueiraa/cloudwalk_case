@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { BRANDS } from "../../format.js";
+import { BRANDS, FRUSTRATION } from "../../format.js";
 import Sheet from "../../components/Sheet.jsx";
 import Toggle from "../../components/Toggle.jsx";
 
@@ -31,6 +31,8 @@ export default function Queues({ loaded, brand, brandQueues, queueName, teams, c
               <small>
                 {teamName[q.team_id] ?? q.team_id}. Atende primeiro: {RESPONDER[q.first_responder]}.
                 {" "}Transferências: {q.escalation_queue_id ? queueName[q.escalation_queue_id] : "a própria fila"}.
+                {q.escalate_on_frustration != null && q.first_responder === "agent" &&
+                  <> Passa para a equipe a partir de “{FRUSTRATION[q.escalate_on_frustration].toLowerCase()}”.</>}
               </small>
             </div>
             <div className="queue-tools">
@@ -59,14 +61,17 @@ export default function Queues({ loaded, brand, brandQueues, queueName, teams, c
 function QueueForm({ queue, brand, teams, others, change, onDone }) {
   const initial = queue
     ? { name: queue.name, team_id: queue.team_id, first_responder: queue.first_responder,
-        escalation_queue_id: queue.escalation_queue_id ?? "", is_default: queue.is_default }
-    : { name: "", team_id: teams[0]?.id ?? "", first_responder: "agent", escalation_queue_id: "", is_default: false };
+        escalation_queue_id: queue.escalation_queue_id ?? "", is_default: queue.is_default,
+        escalate_on_frustration: queue.escalate_on_frustration ?? "" }
+    : { name: "", team_id: teams[0]?.id ?? "", first_responder: "agent", escalation_queue_id: "", is_default: false,
+        escalate_on_frustration: "" };
   const [form, setForm] = useState(initial);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   async function save(e) {
     e.preventDefault();
-    const body = { ...form, escalation_queue_id: form.escalation_queue_id || null };
+    const body = { ...form, escalation_queue_id: form.escalation_queue_id || null,
+                   escalate_on_frustration: form.escalate_on_frustration === "" ? null : Number(form.escalate_on_frustration) };
     if (!queue) {
       if (await change("/api/admin/queues", "POST", { ...body, brand_id: brand }, "Fila criada")) onDone();
       return;
@@ -98,12 +103,21 @@ function QueueForm({ queue, brand, teams, others, change, onDone }) {
           </div>
         </div>
       </div>
-      <label className="field"><span className="field-label">Quando a IA transferir, enviar para</span>
+      <label className="field"><span className="field-label">Quando a conversa for para a equipe, enviar para</span>
         <select value={form.escalation_queue_id} onChange={set("escalation_queue_id")}>
           <option value="">Esta mesma fila</option>
           {others.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       </label>
+      {form.first_responder === "agent" && (
+        <label className="field"><span className="field-label">Passar para a equipe quando o cliente estiver</span>
+          <select value={form.escalate_on_frustration} onChange={set("escalate_on_frustration")}>
+            <option value="">Nunca (a IA decide quando transferir)</option>
+            {FRUSTRATION.slice(1).map((label, i) => <option key={i + 1} value={i + 1}>{label} ou mais</option>)}
+          </select>
+          <small className="field-hint">Frustração medida pelo Jev em cada mensagem. Um pedido explícito de pessoa sempre transfere.</small>
+        </label>
+      )}
       {(!queue || (!queue.is_default && queue.active)) && (
         <label className="check">
           <input type="checkbox" checked={form.is_default} onChange={(e) => setForm({ ...form, is_default: e.target.checked })} />

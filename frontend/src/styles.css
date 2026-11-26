@@ -207,6 +207,22 @@ button:disabled { cursor: default; opacity: .4; }
 .bubble-customer { background: var(--paper); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .bubble-agent { background: var(--ai-soft); border-bottom-right-radius: 4px; }
 .bubble-analyst { background: var(--human-soft); border-bottom-right-radius: 4px; }
+.row-system { justify-items: end; }
+.bubble-system { background: var(--soft); border: 1px dashed var(--line); border-bottom-right-radius: 4px; }
+
+/* Sinais do Jev: só aparecem quando chamam atenção */
+.signals { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.chip { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); }
+.chip-mood-0, .chip-mood-1 { background: var(--soft); color: var(--muted); }
+.chip-mood-2 { background: var(--human-soft); color: var(--human); }
+.chip-mood-3 { background: var(--alert-soft); color: var(--alert); }
+.chip-human { background: var(--human-soft); color: var(--human); }
+.mood { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.moodline { width: 100%; max-width: 220px; height: 44px; margin: 6px 0 8px; }
+.moodline-path { fill: none; stroke: var(--human); stroke-width: 2; stroke-linejoin: round; }
+.moodline-dot { fill: var(--paper); stroke: var(--human); stroke-width: 2; }
+.moodline-mark { stroke: var(--line); stroke-dasharray: 3 3; }
+.field-hint { font-size: 12px; color: var(--muted); }
 
 .event { font-size: 13px; color: var(--muted); gap: 1px; padding: 2px 0; }
 .event::after {

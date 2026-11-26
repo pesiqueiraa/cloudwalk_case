@@ -6,6 +6,13 @@ export const CATEGORIES = {
 };
 export const PRIORITIES = { high: "Alta", normal: "Normal" };
 
+// Frustração medida pelo Jev (Score 0 a 3); a mesma escala do limiar de escalação da fila
+export const FRUSTRATION = ["Calmo", "Incomodado", "Frustrado", "Muito irritado"];
+export function frustrationLevel(x) {
+  return x == null ? null : Math.min(3, Math.max(0, Math.floor(x + 0.5)));
+}
+export const WANTS_HUMAN_MIN = 0.7; // mesmo corte de decision.py
+
 export function time(iso) {
   if (!iso) return "";
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });

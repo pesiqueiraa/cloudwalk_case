@@ -1,4 +1,4 @@
-import { BRANDS, CHANNELS, PRIORITIES, dateTime } from "../format.js";
+import { BRANDS, CHANNELS, FRUSTRATION, PRIORITIES, dateTime, frustrationLevel } from "../format.js";
 
 // O que o analista precisa saber antes de responder, sem disputar espaço com a conversa
 export default function ContextPanel({ data, teamName = {} }) {
@@ -13,6 +13,8 @@ export default function ContextPanel({ data, teamName = {} }) {
           {c.escalation_reason && <p className="muted">Motivo: {c.escalation_reason}.</p>}
         </section>
       )}
+
+      <TriageSignals messages={data.messages ?? []} audit={data.audit ?? []} />
 
       <section className="ctx-section">
         <h2>Atendimento</h2>
@@ -47,5 +49,51 @@ export default function ContextPanel({ data, teamName = {} }) {
           )}
       </section>
     </div>
+  );
+}
+
+// Como o cliente está e quem respondeu: frustração por mensagem (Jev) e o modelo do agente (auditoria)
+function TriageSignals({ messages, audit }) {
+  const points = messages.filter((m) => m.author === "customer" && m.frustration != null);
+  const classified = [...audit].reverse().find((e) => e.type === "message.classified")?.payload;
+  const agent = [...audit].reverse().find((e) => e.type === "agent.replied" && e.payload?.agent)?.payload.agent;
+  if (!classified && !agent) return null;
+  const last = points.at(-1);
+  return (
+    <section className="ctx-section">
+      <h2>Sinais da IA</h2>
+      {points.length > 0 ? (
+        <>
+          <p className="mood">
+            <span className={`chip chip-mood-${frustrationLevel(last.frustration)}`}>{FRUSTRATION[frustrationLevel(last.frustration)]}</span>
+            <span className="muted">na última mensagem ({last.frustration.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} de 3)</span>
+          </p>
+          {points.length > 1 && <MoodLine values={points.map((m) => m.frustration)} />}
+        </>
+      ) : (
+        <p className="muted">Sem medida de frustração: a triagem desta conversa rodou pelas regras.</p>
+      )}
+      <dl className="facts">
+        {classified && <><dt>Triagem</dt><dd>{classified.classifier === "jev" ? `Jev (${classified.version})` : "Regras por palavra-chave"}
+          {classified.fallback_reason && <span className="muted"> (reserva: {classified.fallback_reason})</span>}</dd></>}
+        {agent && <><dt>Agente</dt><dd>{agent.impl === "llm" ? `${agent.model}, esforço ${agent.effort}, prompt v${agent.prompt_version}` : "Mock determinístico"}</dd></>}
+      </dl>
+    </section>
+  );
+}
+
+// Curva da frustração ao longo da conversa, de 0 (calmo) a 3 (muito irritado)
+function MoodLine({ values }) {
+  const w = 220, h = 44, pad = 4;
+  const x = (i) => pad + (i * (w - 2 * pad)) / (values.length - 1);
+  const y = (v) => h - pad - (v / 3) * (h - 2 * pad);
+  const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })},${y(v).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`).join(" ");
+  return (
+    <svg className="moodline" viewBox={`0 0 ${w} ${h}`} role="img"
+         aria-label={`Frustração por mensagem: ${values.map((v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })).join(", ")} (de 0 a 3)`}>
+      <line x1={pad} x2={w - pad} y1={y(2)} y2={y(2)} className="moodline-mark" />
+      <path d={d} className="moodline-path" />
+      {values.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r="3" className="moodline-dot" />)}
+    </svg>
   );
 }

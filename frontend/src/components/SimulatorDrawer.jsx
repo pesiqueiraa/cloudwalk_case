@@ -145,7 +145,7 @@ function CustomerChat({ data, onConversation, onShow }) {
       <ol className="sim-chat">
         {messages.map((m) => (
           <li key={m.id} className={m.author === "customer" ? "sim-msg sim-me" : "sim-msg sim-them"}>
-            {m.author !== "customer" && <span className="sim-who">{m.author === "agent" ? "Assistente" : "Atendente"}</span>}
+            {m.author !== "customer" && <span className="sim-who">{m.author === "analyst" ? "Atendente" : "Assistente"}</span>}
             <p>{m.text}</p>
             <time>{time(m.created_at)}</time>
           </li>
