@@ -45,4 +45,9 @@ def test_keyword_classifier_accuracy_on_labeled_messages():
 def test_get_classifier():
     assert isinstance(get_classifier(Settings(database_url="postgresql://x")), KeywordClassifier)
     with pytest.raises(ValueError):
-        get_classifier(Settings(database_url="postgresql://x", classifier="jev"))
+        get_classifier(Settings(database_url="postgresql://x", classifier="desconhecido"))
+
+
+def test_keyword_classifier_does_not_measure_sentiment():
+    result = classifier.classify("Quero falar com um atendente!!!", "infinitepay", "chat")
+    assert (result.frustration, result.wants_human, result.fallback_reason) == (None, None, None)

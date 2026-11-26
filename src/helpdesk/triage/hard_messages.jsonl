@@ -1,0 +1,48 @@
+{"brand": "infinitepay", "text": "Vendi a manhã inteira e até agora nada entrou na minha conta", "category": "payments", "frustration": 2, "wants_human": false}
+{"brand": "infinitepay", "text": "O cliente jura que mandou, mas pra mim não chegou nada ainda", "category": "payments", "frustration": 1, "wants_human": false}
+{"brand": "infinitepay", "text": "Terceira vez que escrevo aqui e ninguém resolve meu repasse!!! Que palhaçada", "category": "payments", "frustration": 3, "wants_human": false}
+{"brand": "infinitepay", "text": "A tela da minha POS apagou do nada e não volta", "category": "hardware", "frustration": 1, "wants_human": false}
+{"brand": "infinitepay", "text": "O aparelho não imprime mais o papelzinho pro cliente", "category": "hardware", "frustration": 0, "wants_human": false}
+{"brand": "infinitepay", "text": "Comprei o equipamento semana passada e já parou, estou perdendo cliente, isso é um absurdo", "category": "hardware", "frustration": 3, "wants_human": false}
+{"brand": "infinitepay", "text": "Como faço pra pedir o plástico físico pra pagar minhas compras?", "category": "card", "frustration": 0, "wants_human": false}
+{"brand": "infinitepay", "text": "Tentei pagar no mercado e foi recusado, passei vergonha na fila", "category": "card", "frustration": 2, "wants_human": false}
+{"brand": "infinitepay", "text": "Esqueci como entro no app, já tentei de tudo", "category": "account", "frustration": 1, "wants_human": false}
+{"brand": "infinitepay", "text": "Mudei de telefone e agora o aplicativo não me reconhece", "category": "account", "frustration": 0, "wants_human": false}
+{"brand": "infinitepay", "text": "Apareceu uma movimentação de 900 reais que eu não fiz", "category": "fraud", "frustration": 2, "wants_human": false}
+{"brand": "infinitepay", "text": "Um cara se passou pela empresa no WhatsApp e pediu pra eu instalar um app", "category": "fraud", "frustration": 1, "wants_human": false}
+{"brand": "infinitepay", "text": "Me roubaram e estão usando minha conta, socorro", "category": "fraud", "frustration": 3, "wants_human": false}
+{"brand": "infinitepay", "text": "Chega de robô, me passa pra alguém que resolva", "category": "other", "frustration": 3, "wants_human": true}
+{"brand": "infinitepay", "text": "Prefiro conversar com uma pessoa sobre isso", "category": "other", "frustration": 0, "wants_human": true}
+{"brand": "infinitepay", "text": "Valeu, resolveu aqui", "category": "other", "frustration": 0, "wants_human": false}
+{"brand": "infinitepay", "text": "Vocês têm loja física em Curitiba?", "category": "other", "frustration": 0, "wants_human": false}
+{"brand": "infinitepay", "text": "Não aguento mais, o dinheiro das vendas sumiu e eu quero falar com um gerente agora", "category": "payments", "frustration": 3, "wants_human": true}
+{"brand": "infinitepay", "text": "Tudo certo, só queria saber o prazo do crédito parcelado", "category": "payments", "frustration": 0, "wants_human": false}
+{"brand": "infinitepay", "text": "Ótimo, mais um dia sem receber. Parabéns pelo serviço.", "category": "payments", "frustration": 3, "wants_human": false}
+{"brand": "infinitepay", "text": "Não é golpe, só quero mudar meu e-mail de contato", "category": "account", "frustration": 0, "wants_human": false}
+{"brand": "infinitepay", "text": "A maquininha funciona, o problema é que o valor não aparece no app", "category": "payments", "frustration": 1, "wants_human": false}
+{"brand": "infinitepay", "text": "Estou preocupado, a transferência que fiz pro fornecedor ainda não apareceu do lado dele", "category": "payments", "frustration": 1, "wants_human": false}
+{"brand": "infinitepay", "text": "Se não resolverem hoje vou cancelar tudo e reclamar no Procon", "category": "other", "frustration": 3, "wants_human": false}
+{"brand": "jim", "text": "I sold all morning and nothing has hit my account yet", "category": "payments", "frustration": 2, "wants_human": false}
+{"brand": "jim", "text": "My customer swears they paid, but it never showed up on my end", "category": "payments", "frustration": 1, "wants_human": false}
+{"brand": "jim", "text": "Third time writing here and nobody fixes my payout!!! Ridiculous", "category": "payments", "frustration": 3, "wants_human": false}
+{"brand": "jim", "text": "The POS screen went dark and won't turn back on", "category": "hardware", "frustration": 1, "wants_human": false}
+{"brand": "jim", "text": "The device stopped printing slips for my customers", "category": "hardware", "frustration": 0, "wants_human": false}
+{"brand": "jim", "text": "Bought the terminal last week and it already died, I'm losing customers, this is unacceptable", "category": "hardware", "frustration": 3, "wants_human": false}
+{"brand": "jim", "text": "How do I get the physical plastic one to pay for my purchases?", "category": "card", "frustration": 0, "wants_human": false}
+{"brand": "jim", "text": "Got declined at the grocery store, so embarrassing in front of everyone", "category": "card", "frustration": 2, "wants_human": false}
+{"brand": "jim", "text": "I forgot how to get into the app, tried everything", "category": "account", "frustration": 1, "wants_human": false}
+{"brand": "jim", "text": "I switched phones and now the app doesn't recognize me", "category": "account", "frustration": 0, "wants_human": false}
+{"brand": "jim", "text": "There's a $900 movement I never made", "category": "fraud", "frustration": 2, "wants_human": false}
+{"brand": "jim", "text": "A guy pretending to be from the company texted me and asked me to install an app", "category": "fraud", "frustration": 1, "wants_human": false}
+{"brand": "jim", "text": "They stole my phone and are using my account, help", "category": "fraud", "frustration": 3, "wants_human": false}
+{"brand": "jim", "text": "Enough with the bot, get me someone who can actually fix this", "category": "other", "frustration": 3, "wants_human": true}
+{"brand": "jim", "text": "I'd rather discuss this with a person", "category": "other", "frustration": 0, "wants_human": true}
+{"brand": "jim", "text": "Thanks, all sorted", "category": "other", "frustration": 0, "wants_human": false}
+{"brand": "jim", "text": "Do you have a physical store in Austin?", "category": "other", "frustration": 0, "wants_human": false}
+{"brand": "jim", "text": "I can't take it anymore, my sales money vanished and I want a manager now", "category": "payments", "frustration": 3, "wants_human": true}
+{"brand": "jim", "text": "All good, just wanted to know when installment sales settle", "category": "payments", "frustration": 0, "wants_human": false}
+{"brand": "jim", "text": "Great, another day without getting paid. Amazing service.", "category": "payments", "frustration": 3, "wants_human": false}
+{"brand": "jim", "text": "It's not a scam, I just want to change my contact email", "category": "account", "frustration": 0, "wants_human": false}
+{"brand": "jim", "text": "The reader works fine, the problem is the amount doesn't show in the app", "category": "payments", "frustration": 1, "wants_human": false}
+{"brand": "jim", "text": "I'm worried, the transfer I sent to my supplier still hasn't shown up on their side", "category": "payments", "frustration": 1, "wants_human": false}
+{"brand": "jim", "text": "If this isn't fixed today I'm closing everything and filing a complaint", "category": "other", "frustration": 3, "wants_human": false}

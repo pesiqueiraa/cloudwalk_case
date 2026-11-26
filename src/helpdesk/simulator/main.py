@@ -6,6 +6,7 @@
     python -m helpdesk.simulator.main verify [--json] < lote.json
     python -m helpdesk.simulator.main k6-pool [--brand ...] > pool.json      frases e clientes para o k6
     python -m helpdesk.simulator.main from-k6 [--rate R] < k6.log > lote.json  saída do k6 → lote do verify
+    python -m helpdesk.simulator.main evaluate-classifier > avaliacao.md       regras × Jev nos conjuntos rotulados
 """
 import argparse
 import json
@@ -56,6 +57,24 @@ def send(platform_url: str, channel: str, brand: str, text: str | None, category
     return response.json()
 
 
+def evaluate_classifier() -> int:
+    """Roda as regras e, com TYPESAFE_API_KEY, o Jev. Tempo máximo de 5 s: aqui mede-se o acerto, não a reserva."""
+    from helpdesk.triage import evaluate
+    from helpdesk.triage.classifier import KeywordClassifier
+    from helpdesk.triage.jev import JevClassifier
+
+    settings = get_settings()
+    cases = evaluate.load_cases()
+    reports = [evaluate.run(KeywordClassifier(), "regras", cases)]
+    if settings.typesafe_api_key:
+        jev = JevClassifier.from_settings(settings.model_copy(update={"jev_timeout_seconds": 5.0}))
+        reports.append(evaluate.run(jev, "jev", cases))
+    else:
+        print("sem TYPESAFE_API_KEY: só as regras", file=sys.stderr)
+    print(evaluate.to_markdown(reports))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="simulator")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -82,6 +101,7 @@ def main() -> int:
     pool_cmd.add_argument("--brand", choices=sorted(CUSTOMERS), default="infinitepay")
     from_k6_cmd = commands.add_parser("from-k6", help="converte a saída do k6 (stdin) no lote do verify")
     from_k6_cmd.add_argument("--rate", type=float, help="taxa pedida ao k6, guardada no lote")
+    commands.add_parser("evaluate-classifier", help="regras e Jev (se houver chave) nos conjuntos rotulados")
     args = parser.parse_args()
 
     platform_url = get_settings().platform_url
@@ -106,6 +126,8 @@ def main() -> int:
     if args.command == "from-k6":
         print(chaos.dump(chaos.from_k6_lines(sys.stdin.readlines(), args.rate)))
         return 0
+    if args.command == "evaluate-classifier":
+        return evaluate_classifier()
     try:
         (run_escalation_smoke if args.escalation else run_smoke)(platform_url, args.timeout)
     except (SmokeFailure, httpx.HTTPError) as exc:

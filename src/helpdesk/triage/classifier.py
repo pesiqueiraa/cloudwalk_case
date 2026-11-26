@@ -1,11 +1,15 @@
 """Triagem: categoria e prioridade de cada mensagem, atrás de uma interface trocável."""
+import logging
 from collections import Counter
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from helpdesk.config import Settings
 from helpdesk.contracts import BRAND_LOCALE, Brand, Category, Channel, Priority
 from helpdesk.text_match import compile_terms
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -16,10 +20,16 @@ class Classification:
     classifier: str
     version: str
     matched_terms: tuple[str, ...]
+    # Sinais do Jev; None quando o classificador não mede (as regras não medem frustração)
+    frustration: float | None = None     # 0 a 3, pode cair entre níveis
+    wants_human: float | None = None     # probabilidade de o cliente pedir uma pessoa
+    signals: dict = field(default_factory=dict)  # respostas brutas, para a auditoria
+    fallback_reason: str | None = None   # por que o Jev não respondeu e as regras assumiram
 
 
 class Classifier(Protocol):
-    def classify(self, text: str, brand: Brand, channel: Channel) -> Classification: ...
+    def classify(self, text: str, brand: Brand, channel: Channel,
+                 history: Sequence[dict] = ()) -> Classification: ...
 
 
 CATEGORY_TERMS: dict[str, dict[Category, list[str]]] = {
@@ -70,7 +80,9 @@ class KeywordClassifier:
         self._patterns = {locale: compile_terms(terms) for locale, terms in self._category_of.items()}
         self._urgency = {locale: compile_terms(terms) for locale, terms in URGENCY_TERMS.items()}
 
-    def classify(self, text: str, brand: Brand, channel: Channel) -> Classification:
+    def classify(self, text: str, brand: Brand, channel: Channel,
+                 history: Sequence[dict] = ()) -> Classification:
+        # Por regras, só a mensagem atual conta; o histórico é ignorado
         locale = BRAND_LOCALE[brand]
         matched = [m.group(0).lower() for m in self._patterns[locale].finditer(text)]
         counts = Counter(self._category_of[locale][term] for term in matched)
@@ -89,4 +101,11 @@ class KeywordClassifier:
 def get_classifier(settings: Settings) -> Classifier:
     if settings.classifier == "keyword":
         return KeywordClassifier()
+    if settings.classifier == "jev":
+        if not settings.typesafe_api_key:
+            log.warning("CLASSIFIER=jev sem TYPESAFE_API_KEY: a triagem usa as regras")
+            return KeywordClassifier()
+        from helpdesk.triage.jev import JevClassifier
+
+        return JevClassifier.from_settings(settings)
     raise ValueError(f"classificador desconhecido: {settings.classifier}")
